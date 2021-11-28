@@ -14,13 +14,16 @@ define TopoSort {
   }
 
   fastRandom (source,random) {
-    [Append<#n>&ReadAt<#n>] randomized <- Vector:create<#n>()
+    [Append<#n>&ReadAt<#n>] randomized <- Vector<#n>.new()
 
-    CategoricalTree<#id> pending <- CategoricalTree<#id>.new()
+    CategoricalTree<#id>   pending   <- CategoricalTree<#id>.new()
+    RandomCategorical<#id> generator <- pending `RandomCategorical:sampleWith` random
+
     SearchTree<#id,#n>           idToNode  <- SearchTree<#id,#n>.new()
     SearchTree<#id,TreeSet<#id>> blocking  <- SearchTree<#id,TreeSet<#id>>.new()
     SearchTree<#id,TreeSet<#id>> blockedBy <- SearchTree<#id,TreeSet<#id>>.new()
-    $ReadOnly[randomized,pending,idToNode,blocking,blockedBy]$
+
+    $ReadOnly[randomized,pending,generator,idToNode,blocking,blockedBy]$
 
     // Initialize data structures.
     traverse (`Counter.zeroIndexed` source.size() -> Int i) {
@@ -55,8 +58,8 @@ define TopoSort {
     }
 
     // Generate traversal order.
-    while (pending.getTotal() > 0) {
-      #id id <- pending.locate((pending.getTotal().asFloat()*random.generate()).asInt())
+    while (!generator.isEmpty()) {
+      #id id <- generator.generate()
       \ id `pending.setWeight` 0
       \ randomized.append(`require` idToNode.get(id))
       traverse (require(blocking.get(id)).defaultOrder() -> #id id2) {

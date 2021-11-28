@@ -9,23 +9,23 @@ define TopoTest {
       count <- ParseChars.int(Argv.global().readAt(1)).getValue()
     }
 
-    Generator<Float> random <- RandomUniform.new(0.0,1.0).setSeed(Realtime.monoSeconds().asInt())
+    Generator<Float> random <- RandomUniform.probability().setSeed(Realtime.monoSeconds().asInt())
 
-    TestNode node1 <- TestNode.new(1,Vector:create<TestNode>())
-    TestNode node2 <- TestNode.new(2,Vector:create<TestNode>())
-    TestNode node3 <- TestNode.new(3,Vector:create<TestNode>()
+    TestNode node1 <- TestNode.new(1,Vector<TestNode>.new())
+    TestNode node2 <- TestNode.new(2,Vector<TestNode>.new())
+    TestNode node3 <- TestNode.new(3,Vector<TestNode>.new()
         .append(node1)
         .append(node2))
-    TestNode node4 <- TestNode.new(4,Vector:create<TestNode>()
+    TestNode node4 <- TestNode.new(4,Vector<TestNode>.new()
         .append(node1)
         .append(node3))
-    TestNode node5 <- TestNode.new(5,Vector:create<TestNode>()
+    TestNode node5 <- TestNode.new(5,Vector<TestNode>.new()
         .append(node1))
-    TestNode node6 <- TestNode.new(6,Vector:create<TestNode>())
-    TestNode node7 <- TestNode.new(7,Vector:create<TestNode>()
+    TestNode node6 <- TestNode.new(6,Vector<TestNode>.new())
+    TestNode node7 <- TestNode.new(7,Vector<TestNode>.new()
         .append(node6))
 
-    Vector<TestNode> allNodes <- Vector:create<TestNode>()
+    Vector<TestNode> allNodes <- Vector<TestNode>.new()
         .append(node1)
         .append(node2)
         .append(node3)
@@ -87,15 +87,4 @@ define TestNode {
   outgoing () {
     return outgoing
   }
-}
-
-concrete GenerateZero {
-  refines Generator<Float>
-
-  @type new () -> (Generator<Float>)
-}
-
-define GenerateZero {
-  new () { return GenerateZero{ } }
-  generate () { return 0.0 }
 }
