@@ -1,0 +1,147 @@
+define TopoSort {
+  $ReadOnly[reachableFrom,weights]$
+
+  refines LessThan2<#n>
+
+  @value KVReader<#id,[DefaultOrder<#id>&SetReader<#id>]> reachableFrom
+  @value CategoricalReader<#id> weights
+
+  relationFrom (source) {
+    SearchTree<#id,TreeSet<#id>> reachableFrom <- SearchTree<#id,TreeSet<#id>>.new()
+    CategoricalTree<#id> weights <- CategoricalTree<#id>.new()
+    \ TopoSort<#n,#id>.populateReachable(TreeSet<#id>.new(),source,reachableFrom,weights)
+    return TopoSort<#n,#id>{ reachableFrom, weights }
+  }
+
+  fastRandom (source,random) {
+    [Append<#n>&ReadAt<#n>] randomized <- Vector:create<#n>()
+
+    CategoricalTree<#id> pending <- CategoricalTree<#id>.new()
+    SearchTree<#id,#n>           idToNode  <- SearchTree<#id,#n>.new()
+    SearchTree<#id,TreeSet<#id>> blocking  <- SearchTree<#id,TreeSet<#id>>.new()
+    SearchTree<#id,TreeSet<#id>> blockedBy <- SearchTree<#id,TreeSet<#id>>.new()
+    $ReadOnly[randomized,pending,idToNode,blocking,blockedBy]$
+
+    // Initialize data structures.
+    traverse (Counter.zeroIndexed(source.size()) -> Int i) {
+      #n node <- source.readAt(i)
+      $Hidden[i,source]$
+      #id id <- node.getId()
+      $ReadOnly[node,id]$
+      \ idToNode.set(id,node)
+      \ blocking.set(id,TreeSet<#id>.new())
+      \ blockedBy.set(id,TreeSet<#id>.new())
+    }
+    traverse (Counter.zeroIndexed(source.size()) -> Int i) {
+      #id id1 <- source.readAt(i).getId()
+      $Hidden[i,source]$
+      $ReadOnly[id1]$
+      traverse (require(reachableFrom.get(id1)).defaultOrder() -> #id id2) {
+        $ReadOnly[id2]$
+        if (present(idToNode.get(id2))) {
+          // Only use id2 if it's included in the source.
+          \ require(blockedBy.get(id2)).add(id1)
+          \ require(blocking.get(id1)).add(id2)
+        }
+      }
+    }
+    traverse (blockedBy.defaultOrder() -> KeyValue<#id,Container> maybeBlocked) {
+      if (maybeBlocked.getValue().size() == 0) {
+        \ pending.setWeight(maybeBlocked.getKey(),weights.getWeight(maybeBlocked.getKey()))
+      }
+    }
+    if (idToNode.size() != source.size()) {
+      fail("duplicate node key detected")
+    }
+
+    // Generate traversal order.
+    while (pending.getTotal() > 0) {
+      #id id <- pending.locate((pending.getTotal().asFloat()*random.generate()).asInt())
+      \ pending.setWeight(id,0)
+      \ randomized.append(require(idToNode.get(id)))
+      traverse (require(blocking.get(id)).defaultOrder() -> #id id2) {
+        if (require(blockedBy.get(id2)).remove(id).size() == 0) {
+          $Hidden[id]$
+          \ pending.setWeight(id2,weights.getWeight(id2))
+        }
+      }
+      // populateReachable should have already caught cycles, but this is an
+      // additional sanity check that causes a failure if one wasn't caught.
+      \ blocking.remove(id)
+    }
+
+    // Transpose results.
+    if (randomized.size() != source.size()) {
+      fail("algorithm failure")
+    }
+    traverse (Counter.zeroIndexed(randomized.size()) -> Int i) {
+      \ source.writeAt(i,randomized.readAt(i))
+    }
+  }
+
+  isSorted (source) (result) {
+    result <- true
+    scoped {
+      Int i <- 0
+    } in while (i < source.size()-1) {
+      $ReadOnly[i]$
+      scoped {
+        Int j <- i+1
+      } in while (j < source.size()) {
+        $ReadOnly[j]$
+        if (source.readAt(j) `lessThan` source.readAt(i)) {
+          return false
+        }
+      } update {
+        j <- j+1
+      }
+    } update {
+      i <- i+1
+    }
+  }
+
+  lessThan (x,y) {
+    return x.getId() `lessThanId` y.getId()
+  }
+
+  @value lessThanId (#id,#id) -> (Bool)
+  lessThanId (id1,id2) {
+    scoped {
+      optional SetReader<#id> after1 <- reachableFrom.get(id1)
+    } in if (!present(after1)) {
+      return false
+    } else {
+      return require(after1).member(id2)
+    }
+  }
+
+  // NOTE: reachableFrom must have an entry for all #id used in to.
+  @type populateReachable (TreeSet<#id>,ReadAt<#n>,SearchTree<#id,TreeSet<#id>>,CategoricalTree<#id>) -> ()
+  populateReachable (from,to,reachableFrom,weights) {
+    traverse (Counter.zeroIndexed(to.size()) -> Int i) {
+      #n node <- to.readAt(i)
+      $Hidden[i,to]$
+      #id id <- node.getId()
+      $ReadOnly[node,id]$
+      if (from.member(id)) {
+        fail("graph cycle detected")
+      }
+      if (!present(reachableFrom.get(id))) {
+        \ reachableFrom.set(id,TreeSet<#id>.new())
+      }
+      if (weights.getWeight(id) == 0) {
+        \ weights.setWeight(id,1)
+      }
+      TreeSet<#id> nodes <- require(reachableFrom.get(id))
+      traverse (from.defaultOrder() -> #id id2) {
+        if (!nodes.member(id2)) {
+          \ nodes.add(id2)
+          \ weights.incrWeight(id)
+        }
+      }
+      \ from.add(id)
+      \ populateReachable(from,node.outgoing(),reachableFrom,weights)
+      \ from.remove(id)
+    }
+  }
+}

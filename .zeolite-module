@@ -1,0 +1,12 @@
+root: ".."
+path: "topo-sort"
+private_deps: [
+  "lib/container"
+  "lib/util"
+  "lib/math"
+  "lib/thread"
+]
+mode: binary {
+  category: TopoTest
+  function: run
+}
