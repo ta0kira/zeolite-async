@@ -42,25 +42,25 @@ define TopoTest {
       $Hidden[allNodes]$
       \ copy `topoSort.fastRandom` random
       \ formatNodes(copy,topoSort)
-      \ LazyStream<Formatted>.new()
-          .append(i)
-          .append("\n")
-          .writeTo(SimpleOutput.stderr())
+      \ BasicOutput.stderr()
+          .write(i)
+          .write("\n")
+          .flush()
     }
   }
 
   @type formatNodes (ReadAt<TestNode>,TopoSort<TestNode,Int>) -> ()
   formatNodes (allNodes,topoSort) {
     traverse (`Counter.zeroIndexed` allNodes.size() -> Int i) {
-      \ LazyStream<Formatted>.new()
-          .append(allNodes.readAt(i).getId())
-          .append(" ")
-          .writeTo(SimpleOutput.stdout())
+      \ BasicOutput.stdout()
+          .write(allNodes.readAt(i).getId())
+          .write(" ")
+          .flush()
     }
-    \ LazyStream<Formatted>.new()
-        .append(`topoSort.isSorted` allNodes)
-        .append("\n")
-        .writeTo(SimpleOutput.stdout())
+    \ BasicOutput.stdout()
+        .write(`topoSort.isSorted` allNodes)
+        .write("\n")
+        .flush()
   }
 }
 
