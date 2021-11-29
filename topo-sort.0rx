@@ -30,9 +30,9 @@ define TopoSort {
       $Hidden[i,source]$
       #id id <- node.getId()
       $ReadOnly[node,id]$
-      \ idToNode.set(id,node)
-      \ blocking.set(id,TreeSet<#id>.new())
-      \ blockedBy.set(id,TreeSet<#id>.new())
+      \ id `idToNode.set`  node
+      \ id `blocking.set`  TreeSet<#id>.new()
+      \ id `blockedBy.set` TreeSet<#id>.new()
     }
     traverse (`Counter.zeroIndexed` source.size() -> Int i) {
       #id id1 <- source.readAt(i).getId()
@@ -145,7 +145,7 @@ define RelationBuilder {
         fail("graph cycle detected")
       }
       if (! `present` reachableFrom.get(id)) {
-        \ reachableFrom.set(id,TreeSet<#id>.new())
+        \ id `reachableFrom.set` TreeSet<#id>.new()
       }
       if (`weights.getWeight` id == 0) {
         \ id `weights.setWeight` 1
