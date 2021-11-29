@@ -7,9 +7,8 @@ define TopoSort {
   @value CategoricalReader<#id> weights
 
   relationFrom (source) {
-    SearchTree<#id,TreeSet<#id>> reachableFrom <- SearchTree<#id,TreeSet<#id>>.new()
-    CategoricalTree<#id> weights <- CategoricalTree<#id>.new()
-    \ TopoSort<#n,#id>.populateReachable(TreeSet<#id>.new(),source,reachableFrom,weights)
+    SearchTree<#id,TreeSet<#id>> reachableFrom, CategoricalTree<#id> weights <-
+        RelationBuilder<#n,#id>.buildFrom(source)
     return TopoSort<#n,#id>{ reachableFrom, weights }
   }
 
@@ -68,8 +67,6 @@ define TopoSort {
           \ id2 `pending.setWeight` `weights.getWeight` id2
         }
       }
-      // populateReachable should have already caught cycles, but this is an
-      // additional sanity check that causes a failure if one wasn't caught.
       \ blocking.remove(id)
     }
 
@@ -92,7 +89,7 @@ define TopoSort {
         Int j <- i+1
       } in while (j < source.size()) {
         $ReadOnly[j]$
-        if (source.readAt(j) `lessThan` source.readAt(i)) {
+        if (source.readAt(j) `lessThan2` source.readAt(i)) {
           return false
         }
       } update {
@@ -103,7 +100,7 @@ define TopoSort {
     }
   }
 
-  lessThan (x,y) {
+  lessThan2 (x,y) {
     return x.getId() `lessThanId` y.getId()
   }
 
@@ -117,10 +114,28 @@ define TopoSort {
       return require(after1).member(id2)
     }
   }
+}
 
-  // NOTE: reachableFrom must have an entry for all #id used in to.
-  @type populateReachable (TreeSet<#id>,ReadAt<#n>,SearchTree<#id,TreeSet<#id>>,CategoricalTree<#id>) -> ()
-  populateReachable (from,to,reachableFrom,weights) {
+concrete RelationBuilder<#n,#id> {
+  #id immutable
+  #id defines LessThan<#id>
+  #n requires GraphNode<#id>
+
+  @type buildFrom (ReadAt<#n>) -> (SearchTree<#id,TreeSet<#id>>,CategoricalTree<#id>)
+}
+
+define RelationBuilder {
+  $ReadOnly[reachableFrom,weights]$
+
+  @value SearchTree<#id,TreeSet<#id>> reachableFrom
+  @value CategoricalTree<#id> weights
+
+  buildFrom (source) {
+    return #self{ SearchTree<#id,TreeSet<#id>>.new(), CategoricalTree<#id>.new() }.populate(TreeSet<#id>.new(),source).get()
+  }
+
+  @value populate (TreeSet<#id>,ReadAt<#n>) -> (#self)
+  populate (from,to) {
     traverse (`Counter.zeroIndexed` to.size() -> Int i) {
       #n node <- to.readAt(i)
       $Hidden[i,to]$
@@ -143,8 +158,14 @@ define TopoSort {
         }
       }
       \ from.add(id)
-      \ populateReachable(from,node.outgoing(),reachableFrom,weights)
+      \ populate(from,node.outgoing())
       \ from.remove(id)
     }
+    return self
+  }
+
+  @value get () -> (SearchTree<#id,TreeSet<#id>>,CategoricalTree<#id>)
+  get () {
+    return reachableFrom, weights
   }
 }
