@@ -6,6 +6,7 @@ $ModuleOnly$
 }
 
 @value interface GraphQueue<#n> {
+  isEmpty () -> (Bool)
   exchange (optional #n) -> (optional #n)
 }
 

@@ -127,7 +127,7 @@ define DependencyQueue {
   @value CategoricalTree<#id>   pending
   @value RandomCategorical<#id> generator
 
-  @value KVReader<#id,#n>                idToNode
+  @value SearchTree<#id,#n>              idToNode
   @value KVReader<#id,DefaultOrder<#id>> blocking
   @value SearchTree<#id,TreeSet<#id>>    blockedBy
 
@@ -170,6 +170,14 @@ define DependencyQueue {
         blockedBy }
   }
 
+  isEmpty () {
+    scoped {
+      MutexLock lock <- MutexLock.lock(mutex)
+    } cleanup {
+      \ lock.freeResource()
+    } in return idToNode.size() == 0
+  }
+
   exchange (complete) {
     scoped {
       MutexLock lock <- MutexLock.lock(mutex)
@@ -192,6 +200,7 @@ define DependencyQueue {
 
   @value markComplete (#id) -> ()
   markComplete (id) {
+    \ idToNode.remove(id)
     \ id `pending.setWeight` 0
     scoped {
       optional DefaultOrder<#id> blockedByNode1 <- blocking.get(id)
