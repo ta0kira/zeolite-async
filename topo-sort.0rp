@@ -32,3 +32,18 @@ concrete TopoSort<#n,#id> {
   // - The input does not need to include all nodes in the graph.
   @value isSorted (ReadAt<#n>) -> (Bool)
 }
+
+@value interface GraphQueue<#n,#id> {
+  exchange (optional #id) -> (optional #n,optional #id)
+}
+
+concrete DependencyQueue<#n,#id> {
+  refines GraphQueue<#n,#id>
+  #n requires GraphNode<#id>
+
+  @category new<#n,#id>
+    #id immutable
+    #id defines LessThan<#id>
+    #n requires GraphNode<#id>
+  (ReadAt<#n>,[Duplicate&CategoricalReader<#id>],Generator<Float>) -> (GraphQueue<#n,#id>)
+}

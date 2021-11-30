@@ -168,3 +168,123 @@ define RelationBuilder {
     return reachableFrom, weights
   }
 }
+
+define DependencyQueue {
+  $ReadOnly[mutex,priority,pending,generator,idToNode,blocking,blockedBy]$
+
+  @value Mutex mutex
+
+  @value CategoricalReader<#id> priority
+  @value CategoricalTree<#id>   pending
+  @value RandomCategorical<#id> generator
+
+  @value KVReader<#id,#n>                idToNode
+  @value KVReader<#id,DefaultOrder<#id>> blocking
+  @value SearchTree<#id,TreeSet<#id>>    blockedBy
+
+  new (source,priority,random) {
+    CategoricalTree<#id>         pending   <- CategoricalTree<#id>.new()
+    SearchTree<#id,#n>           idToNode  <- SearchTree<#id,#n>.new()
+    SearchTree<#id,TreeSet<#id>> blocking  <- SearchTree<#id,TreeSet<#id>>.new()
+    SearchTree<#id,TreeSet<#id>> blockedBy <- SearchTree<#id,TreeSet<#id>>.new()
+
+    traverse (`ReadAtH:forwardOrder` source -> #n node) {
+      \ node.getId() `idToNode.set` node
+    }
+
+    \ fillBlockers(source,blocking,blockedBy)
+
+    return DependencyQueue<#n,#id>{
+        SimpleMutex.new(),
+        priority.duplicate(),
+        pending,
+        pending `RandomCategorical:sampleWith` random,
+        idToNode,
+        blocking,
+        blockedBy }
+  }
+
+  exchange (complete) {
+    scoped {
+      MutexLock lock <- MutexLock.lock(mutex)
+    } cleanup {
+      \ lock.freeResource()
+    } in {
+      if (`present` complete) {
+        \ markComplete(`require` complete)
+      }
+      if (generator.isEmpty()) {
+        return empty, empty
+      } else {
+        #id id <- generator.generate()
+        return idToNode.get(id), id
+      }
+    }
+  }
+
+  @value markComplete (#id) -> ()
+  markComplete (id) {
+    \ id `pending.setWeight` 0
+    scoped {
+      optional DefaultOrder<#id> blockedByNode1 <- blocking.get(id)
+    } in if (`present` blockedByNode1) {
+      traverse (require(blockedByNode1).defaultOrder() -> #id id2) {
+        if (require(blockedBy.get(id2)).remove(id).size() == 0) {
+          $Hidden[id]$
+          Int weight <- `priority.getWeight` id2
+          if (weight > 0) {
+            \ id2 `pending.setWeight` weight
+          } else {
+            // TODO: Should there be a default or error instead? In case the
+            // caller forgot to include the node in the priorities.
+            \ markComplete(id2)
+          }
+        }
+      }
+    }
+  }
+
+  @category fillBlockers<#n,#id>
+    #id immutable
+    #id defines LessThan<#id>
+    #n requires GraphNode<#id>
+  (ReadAt<#n>,SearchTree<#id,TreeSet<#id>>,SearchTree<#id,TreeSet<#id>>) -> ()
+  fillBlockers (source,blocking,blockedBy) {
+    traverse (`ReadAtH:forwardOrder` source -> #n node1) {
+      #id id1 <- node1.getId()
+      $ReadOnly[id1]$
+      if (`present` blocking.get(id1)) {
+        continue
+      }
+      traverse (`ReadAtH:forwardOrder` node1.outgoing() -> #n node2) {
+        $Hidden[node1]$
+        #id id2 <- node2.getId()
+        $Hidden[node2]$
+        $ReadOnly[id2]$
+        TreeSet<#id> blockedByNode1 <- defer
+        scoped {
+          optional TreeSet<#id> existing <- blocking.get(id1)
+        } in if (present(existing)) {
+          blockedByNode1 <- `require` existing
+        } else {
+          \ id1 `blocking.set` (blockedByNode1 <- TreeSet<#id>.new())
+        }
+        $Hidden[blocking]$
+        $ReadOnly[blockedByNode1]$
+        TreeSet<#id> blockingNode2 <- defer
+        scoped {
+          optional TreeSet<#id> existing <- blockedBy.get(id2)
+        } in if (present(existing)) {
+          blockingNode2 <- `require` existing
+        } else {
+          \ id2 `blockedBy.set` (blockingNode2 <- TreeSet<#id>.new())
+        }
+        $Hidden[blockedBy]$
+        $ReadOnly[blockingNode2]$
+        \ blockedByNode1.add(id2)
+        \ blockingNode2.add(id1)
+      }
+      \ fillBlockers(node1.outgoing(),blocking,blockedBy)
+    }
+  }
+}
