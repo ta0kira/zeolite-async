@@ -5,6 +5,10 @@ $ModuleOnly$
   outgoing () -> (ReadAt<#self>)
 }
 
+@value interface GraphQueue<#n> {
+  exchange (optional #n) -> (optional #n)
+}
+
 concrete TopoSort<#n,#id> {
   #id immutable
   #id defines LessThan<#id>
@@ -22,28 +26,12 @@ concrete TopoSort<#n,#id> {
   (ReadAt<#n>) -> (TopoSort<#n,#id>)
 
   // Notes:
-  // - The input is modified in place.
   // - All input nodes *must* have unique IDs.
   // - The input does not need to include all nodes in the graph. Only nodes
   //   included in the input will be used, even if others are reachable.
-  @value fastRandom ([ReadAt<#n>&WriteAt<#n>],Generator<Float>) -> ()
+  @value graphQueue (ReadAt<#n>,Generator<Float>) -> (GraphQueue<#n>)
 
   // Notes:
   // - The input does not need to include all nodes in the graph.
   @value isSorted (ReadAt<#n>) -> (Bool)
-}
-
-@value interface GraphQueue<#n,#id> {
-  exchange (optional #id) -> (optional #n,optional #id)
-}
-
-concrete DependencyQueue<#n,#id> {
-  refines GraphQueue<#n,#id>
-  #n requires GraphNode<#id>
-
-  @category new<#n,#id>
-    #id immutable
-    #id defines LessThan<#id>
-    #n requires GraphNode<#id>
-  (ReadAt<#n>,[Duplicate&CategoricalReader<#id>],Generator<Float>) -> (GraphQueue<#n,#id>)
 }

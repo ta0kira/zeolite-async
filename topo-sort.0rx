@@ -12,71 +12,8 @@ define TopoSort {
     return TopoSort<#n,#id>{ reachableFrom, weights }
   }
 
-  fastRandom (source,random) {
-    [Append<#n>&ReadAt<#n>] randomized <- Vector<#n>.new()
-
-    CategoricalTree<#id>   pending   <- CategoricalTree<#id>.new()
-    RandomCategorical<#id> generator <- pending `RandomCategorical:sampleWith` random
-
-    SearchTree<#id,#n>           idToNode  <- SearchTree<#id,#n>.new()
-    SearchTree<#id,TreeSet<#id>> blocking  <- SearchTree<#id,TreeSet<#id>>.new()
-    SearchTree<#id,TreeSet<#id>> blockedBy <- SearchTree<#id,TreeSet<#id>>.new()
-
-    $ReadOnly[randomized,pending,generator,idToNode,blocking,blockedBy]$
-
-    // Initialize data structures.
-    traverse (`ReadAtH:forwardOrder` source -> #n node) {
-      $Hidden[source]$
-      #id id <- node.getId()
-      $ReadOnly[node,id]$
-      \ id `idToNode.set`  node
-      \ id `blocking.set`  TreeSet<#id>.new()
-      \ id `blockedBy.set` TreeSet<#id>.new()
-    }
-    traverse (`ReadAtH:forwardOrder` source -> #n node) {
-      $Hidden[source]$
-      #id id1 <- node.getId()
-      $Hidden[node]$
-      $ReadOnly[id1]$
-      traverse (require(reachableFrom.get(id1)).defaultOrder() -> #id id2) {
-        $ReadOnly[id2]$
-        if (`present` idToNode.get(id2)) {
-          // Only use id2 if it's included in the source.
-          \ require(blockedBy.get(id2)).add(id1)
-          \ require(blocking.get(id1)).add(id2)
-        }
-      }
-    }
-    traverse (blockedBy.defaultOrder() -> KeyValue<#id,Container> maybeBlocked) {
-      if (maybeBlocked.getValue().size() == 0) {
-        \ maybeBlocked.getKey() `pending.setWeight` `weights.getWeight` maybeBlocked.getKey()
-      }
-    }
-    if (idToNode.size() != source.size()) {
-      fail("duplicate node key detected")
-    }
-
-    // Generate traversal order.
-    while (!generator.isEmpty()) {
-      #id id <- generator.generate()
-      \ id `pending.setWeight` 0
-      \ randomized.append(`require` idToNode.get(id))
-      traverse (require(blocking.get(id)).defaultOrder() -> #id id2) {
-        if (require(blockedBy.get(id2)).remove(id).size() == 0) {
-          $Hidden[id]$
-          \ id2 `pending.setWeight` `weights.getWeight` id2
-        }
-      }
-      \ blocking.remove(id)
-    }
-
-    // Transpose results.
-    if (randomized.size() != source.size()) {
-      fail("algorithm failure")
-    }
-    traverse (`Counter.zeroIndexed` randomized.size() -> Int i) {
-      \ source.writeAt(i,randomized.readAt(i))
-    }
+  graphQueue (source,random) {
+    return DependencyQueue:new(source,weights,reachableFrom,random)
   }
 
   isSorted (source) (result) {
@@ -169,8 +106,20 @@ define RelationBuilder {
   }
 }
 
+concrete DependencyQueue<#n,#id> {
+  #n requires GraphNode<#id>
+
+  @category new<#n,#id>
+    #id immutable
+    #id defines LessThan<#id>
+    #n requires GraphNode<#id>
+  (ReadAt<#n>,CategoricalReader<#id>,KVReader<#id,DefaultOrder<#id>>,Generator<Float>) -> (GraphQueue<#n>)
+}
+
 define DependencyQueue {
   $ReadOnly[mutex,priority,pending,generator,idToNode,blocking,blockedBy]$
+
+  refines GraphQueue<#n>
 
   @value Mutex mutex
 
@@ -182,21 +131,38 @@ define DependencyQueue {
   @value KVReader<#id,DefaultOrder<#id>> blocking
   @value SearchTree<#id,TreeSet<#id>>    blockedBy
 
-  new (source,priority,random) {
+  new (source,priority,blocking,random) {
     CategoricalTree<#id>         pending   <- CategoricalTree<#id>.new()
     SearchTree<#id,#n>           idToNode  <- SearchTree<#id,#n>.new()
-    SearchTree<#id,TreeSet<#id>> blocking  <- SearchTree<#id,TreeSet<#id>>.new()
     SearchTree<#id,TreeSet<#id>> blockedBy <- SearchTree<#id,TreeSet<#id>>.new()
 
     traverse (`ReadAtH:forwardOrder` source -> #n node) {
       \ node.getId() `idToNode.set` node
     }
 
-    \ fillBlockers(source,blocking,blockedBy)
+    traverse (`ReadAtH:forwardOrder` source -> #n node1) {
+      #id id1 <- node1.getId()
+      $ReadOnly[node1]$
+      TreeSet<#id> blockingNode1 <- TreeSet<#id>.new()
+      $ReadOnly[id1]$
+      traverse (`ReadAtH:forwardOrder` node1.outgoing() -> #n node2) {
+        #id id2 <- node2.getId()
+        $Hidden[node1,node2]$
+        if (`present` idToNode.get(id2)) {
+          \ blockingNode1.add(id2)
+        }
+      }
+      $Hidden[node1]$
+      if (blockingNode1.size() > 0) {
+        \ id1 `blockedBy.set` blockingNode1
+      } else {
+        \ id1 `pending.setWeight` `priority.getWeight` id1
+      }
+    }
 
     return DependencyQueue<#n,#id>{
         SimpleMutex.new(),
-        priority.duplicate(),
+        priority,
         pending,
         pending `RandomCategorical:sampleWith` random,
         idToNode,
@@ -211,13 +177,15 @@ define DependencyQueue {
       \ lock.freeResource()
     } in {
       if (`present` complete) {
-        \ markComplete(`require` complete)
+        \ markComplete(require(complete).getId())
       }
       if (generator.isEmpty()) {
-        return empty, empty
+        // TODO: If there are multiple threads, this might not actually indicate
+        // that there are no more nodes to process.
+        return empty
       } else {
         #id id <- generator.generate()
-        return idToNode.get(id), id
+        return idToNode.get(id)
       }
     }
   }
@@ -229,7 +197,9 @@ define DependencyQueue {
       optional DefaultOrder<#id> blockedByNode1 <- blocking.get(id)
     } in if (`present` blockedByNode1) {
       traverse (require(blockedByNode1).defaultOrder() -> #id id2) {
-        if (require(blockedBy.get(id2)).remove(id).size() == 0) {
+        scoped {
+          optional TreeSet<#id> blockingNode2 <- blockedBy.get(id2)
+        } in if (`present` blockingNode2 && require(blockingNode2).remove(id).size() == 0) {
           $Hidden[id]$
           Int weight <- `priority.getWeight` id2
           if (weight > 0) {
@@ -241,50 +211,6 @@ define DependencyQueue {
           }
         }
       }
-    }
-  }
-
-  @category fillBlockers<#n,#id>
-    #id immutable
-    #id defines LessThan<#id>
-    #n requires GraphNode<#id>
-  (ReadAt<#n>,SearchTree<#id,TreeSet<#id>>,SearchTree<#id,TreeSet<#id>>) -> ()
-  fillBlockers (source,blocking,blockedBy) {
-    traverse (`ReadAtH:forwardOrder` source -> #n node1) {
-      #id id1 <- node1.getId()
-      $ReadOnly[id1]$
-      if (`present` blocking.get(id1)) {
-        continue
-      }
-      traverse (`ReadAtH:forwardOrder` node1.outgoing() -> #n node2) {
-        $Hidden[node1]$
-        #id id2 <- node2.getId()
-        $Hidden[node2]$
-        $ReadOnly[id2]$
-        TreeSet<#id> blockedByNode1 <- defer
-        scoped {
-          optional TreeSet<#id> existing <- blocking.get(id1)
-        } in if (present(existing)) {
-          blockedByNode1 <- `require` existing
-        } else {
-          \ id1 `blocking.set` (blockedByNode1 <- TreeSet<#id>.new())
-        }
-        $Hidden[blocking]$
-        $ReadOnly[blockedByNode1]$
-        TreeSet<#id> blockingNode2 <- defer
-        scoped {
-          optional TreeSet<#id> existing <- blockedBy.get(id2)
-        } in if (present(existing)) {
-          blockingNode2 <- `require` existing
-        } else {
-          \ id2 `blockedBy.set` (blockingNode2 <- TreeSet<#id>.new())
-        }
-        $Hidden[blockedBy]$
-        $ReadOnly[blockingNode2]$
-        \ blockedByNode1.add(id2)
-        \ blockingNode2.add(id1)
-      }
-      \ fillBlockers(node1.outgoing(),blocking,blockedBy)
     }
   }
 }

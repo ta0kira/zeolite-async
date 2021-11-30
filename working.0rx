@@ -38,9 +38,13 @@ define TopoTest {
     TopoSort<TestNode,Int> topoSort <- `TopoSort:relationFrom<?,Int>` allNodes
 
     traverse (`Counter.zeroIndexed` count -> Int i) {
-      Vector<TestNode> copy <- allNodes.duplicate()
-      $Hidden[allNodes]$
-      \ copy `topoSort.fastRandom` random
+      Vector<TestNode> copy <- Vector<TestNode>.new()
+      scoped {
+        GraphQueue<TestNode> queue <- allNodes `topoSort.graphQueue` random
+        optional TestNode node <- empty
+      } in while (`present` (node <- queue.exchange(node))) {
+        \ copy.append(`require` node)
+      }
       \ formatNodes(copy,topoSort)
       \ BasicOutput.stderr()
           .write(i)
