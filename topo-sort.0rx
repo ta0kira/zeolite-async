@@ -25,18 +25,18 @@ define TopoSort {
     $ReadOnly[randomized,pending,generator,idToNode,blocking,blockedBy]$
 
     // Initialize data structures.
-    traverse (`Counter.zeroIndexed` source.size() -> Int i) {
-      #n node <- source.readAt(i)
-      $Hidden[i,source]$
+    traverse (`ReadAtH:forwardOrder` source -> #n node) {
+      $Hidden[source]$
       #id id <- node.getId()
       $ReadOnly[node,id]$
       \ id `idToNode.set`  node
       \ id `blocking.set`  TreeSet<#id>.new()
       \ id `blockedBy.set` TreeSet<#id>.new()
     }
-    traverse (`Counter.zeroIndexed` source.size() -> Int i) {
-      #id id1 <- source.readAt(i).getId()
-      $Hidden[i,source]$
+    traverse (`ReadAtH:forwardOrder` source -> #n node) {
+      $Hidden[source]$
+      #id id1 <- node.getId()
+      $Hidden[node]$
       $ReadOnly[id1]$
       traverse (require(reachableFrom.get(id1)).defaultOrder() -> #id id2) {
         $ReadOnly[id2]$
@@ -136,9 +136,8 @@ define RelationBuilder {
 
   @value populate (TreeSet<#id>,ReadAt<#n>) -> (#self)
   populate (from,to) {
-    traverse (`Counter.zeroIndexed` to.size() -> Int i) {
-      #n node <- to.readAt(i)
-      $Hidden[i,to]$
+    traverse (`ReadAtH:forwardOrder` to -> #n node) {
+      $Hidden[to]$
       #id id <- node.getId()
       $ReadOnly[node,id]$
       if (from.member(id)) {

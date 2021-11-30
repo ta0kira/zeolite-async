@@ -51,9 +51,9 @@ define TopoTest {
 
   @type formatNodes (ReadAt<TestNode>,TopoSort<TestNode,Int>) -> ()
   formatNodes (allNodes,topoSort) {
-    traverse (`Counter.zeroIndexed` allNodes.size() -> Int i) {
+    traverse (`ReadAtH:forwardOrder` allNodes -> TestNode node) {
       \ BasicOutput.stdout()
-          .write(allNodes.readAt(i).getId())
+          .write(node.getId())
           .write(" ")
           .flush()
     }
