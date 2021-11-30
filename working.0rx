@@ -42,6 +42,9 @@ define TopoTest {
       scoped {
         GraphQueue<TestNode> queue <- allNodes `topoSort.graphQueue` random
         optional TestNode node <- empty
+      } cleanup {
+        // General safeguard in case there's a return or break in the loop.
+        \ queue.finish(node)
       } in while (`present` (node <- queue.exchange(node))) {
         \ copy.append(`require` node)
       }
