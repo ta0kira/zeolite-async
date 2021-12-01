@@ -1,17 +1,17 @@
 define TopoSort {
-  $ReadOnly[reachableFrom,weights]$
+  $ReadOnly[blocking,weights]$
 
-  @value KVReader<#id,[DefaultOrder<#id>&SetReader<#id>]> reachableFrom
+  @value KVReader<#id,[DefaultOrder<#id>&SetReader<#id>]> blocking
   @value CategoricalReader<#id> weights
 
   relationFrom (source) {
-    SearchTree<#id,TreeSet<#id>> reachableFrom, CategoricalTree<#id> weights <-
+    SearchTree<#id,TreeSet<#id>> blocking, CategoricalTree<#id> weights <-
         RelationBuilder<#n,#id>.buildFrom(source)
-    return TopoSort<#n,#id>{ reachableFrom, weights }
+    return TopoSort<#n,#id>{ blocking, weights }
   }
 
   graphQueue (source,random) {
-    return DependencyQueue:new(source,weights,reachableFrom,random)
+    return DependencyQueue:new(source,weights,blocking,random)
   }
 
   isSorted (source) (result) {
@@ -42,7 +42,7 @@ define TopoSort {
   @value lessThanId (#id,#id) -> (Bool)
   lessThanId (id1,id2) {
     scoped {
-      optional SetReader<#id> after1 <- reachableFrom.get(id1)
+      optional SetReader<#id> after1 <- blocking.get(id1)
     } in if (! `present` after1) {
       return false
     } else {
@@ -60,47 +60,59 @@ concrete RelationBuilder<#n,#id> {
 }
 
 define RelationBuilder {
-  $ReadOnly[reachableFrom,weights]$
-
-  @value SearchTree<#id,TreeSet<#id>> reachableFrom
+  @value SearchTree<#id,TreeSet<#id>> blocking
   @value CategoricalTree<#id> weights
+  @value SearchTree<#id,#n> idToNode
 
   buildFrom (source) {
-    return #self{ SearchTree<#id,TreeSet<#id>>.new(), CategoricalTree<#id>.new() }.populate(TreeSet<#id>.new(),source).get()
+    return #self{
+        SearchTree<#id,TreeSet<#id>>.new(),
+        CategoricalTree<#id>.new(),
+        SearchTree<#id,#n>.new() }.process(source)
   }
 
-  @value populate (TreeSet<#id>,ReadAt<#n>) -> (#self)
-  populate (from,to) {
-    traverse (`ReadAtH:forwardOrder` to -> #n node) {
-      $Hidden[to]$
-      #id id <- node.getId()
-      $ReadOnly[node,id]$
-      if (from.member(id)) {
-        fail("graph cycle detected")
-      }
-      if (! `present` reachableFrom.get(id)) {
-        \ id `reachableFrom.set` TreeSet<#id>.new()
-      }
-      if (`weights.getWeight` id == 0) {
-        \ id `weights.setWeight` 1
-      }
-      TreeSet<#id> nodes <- `require` reachableFrom.get(id)
-      traverse (from.defaultOrder() -> #id id2) {
-        if (!nodes.member(id2)) {
-          \ nodes.add(id2)
-          \ weights.incrWeight(id)
-        }
-      }
-      \ from.add(id)
-      \ populate(from,node.outgoing())
-      \ from.remove(id)
+  @value process (ReadAt<#n>) -> (SearchTree<#id,TreeSet<#id>>,CategoricalTree<#id>)
+  process (source) (blocking2,weights2) {
+    blocking2 <- blocking
+    weights2 <- weights
+    $Hidden[blocking2,weights2]$
+    \ collectNodes(source)
+    traverse (idToNode.defaultOrder() -> KeyValue<#id,#n> idNode) {
+      \ weights.incrWeight(idNode.getKey())
+      \ idNode.getKey() `setBlockedBy` idNode.getValue().outgoing()
     }
-    return self
   }
 
-  @value get () -> (SearchTree<#id,TreeSet<#id>>,CategoricalTree<#id>)
-  get () {
-    return reachableFrom, weights
+  @value collectNodes (ReadAt<#n>) -> ()
+  collectNodes (nodes) {
+    traverse (`ReadAtH:forwardOrder` nodes -> #n node) {
+      #id id <- node.getId()
+      if (! `present` idToNode.get(id)) {
+        \ id `idToNode.set` node
+        \ collectNodes(node.outgoing())
+      }
+    }
+  }
+
+  @value setBlockedBy (#id,ReadAt<#n>) -> ()
+  setBlockedBy (id1,blockedBy) {
+    traverse (`ReadAtH:forwardOrder` blockedBy -> #n node2) {
+      #id id2 <- node2.getId()
+      $ReadOnly[node2,id2]$
+      TreeSet<#id> blockedByNode2 <- defer
+      scoped {
+        optional TreeSet<#id> existing <- blocking.get(id2)
+      } in if (`present` existing) {
+        blockedByNode2 <- `require` existing
+      } else {
+        \ id2 `blocking.set` (blockedByNode2 <- TreeSet<#id>.new())
+      }
+      if (!blockedByNode2.member(id1)) {
+        \ blockedByNode2.add(id1)
+        \ weights.incrWeight(id2)
+        \ id1 `setBlockedBy` node2.outgoing()
+      }
+    }
   }
 }
 
@@ -135,7 +147,12 @@ define DependencyQueue {
     SearchTree<#id,TreeSet<#id>> blockedBy <- SearchTree<#id,TreeSet<#id>>.new()
 
     traverse (`ReadAtH:forwardOrder` source -> #n node) {
-      \ node.getId() `idToNode.set` node
+      #id id <- node.getId()
+      if (priority.getWeight(id) == 0) {
+        fail("node with 0 priority will never be returned")
+      } else {
+        \ node.getId() `idToNode.set` node
+      }
     }
 
     traverse (`ReadAtH:forwardOrder` source -> #n node1) {
@@ -158,7 +175,7 @@ define DependencyQueue {
       }
     }
 
-    return DependencyQueue<#n,#id>{
+    DependencyQueue<#n,#id> queue <- DependencyQueue<#n,#id>{
         ThreadCondition.new(),
         priority,
         pending,
@@ -166,6 +183,12 @@ define DependencyQueue {
         idToNode,
         blocking,
         blockedBy }
+
+    if (queue.shouldBlock()) {
+      fail("DependencyQueue will never return a node")
+    } else {
+      return queue
+    }
   }
 
   isEmpty () {
@@ -217,24 +240,22 @@ define DependencyQueue {
   }
 
   @value markComplete (#id) -> ()
-  markComplete (id) {
-    \ idToNode.remove(id)
-    \ id `pending.setWeight` 0
+  markComplete (id1) {
+    \ idToNode.remove(id1)
+    \ id1 `pending.setWeight` 0
     scoped {
-      optional DefaultOrder<#id> blockedByNode1 <- blocking.get(id)
+      optional DefaultOrder<#id> blockedByNode1 <- blocking.get(id1)
     } in if (`present` blockedByNode1) {
       traverse (require(blockedByNode1).defaultOrder() -> #id id2) {
         scoped {
           optional TreeSet<#id> blockingNode2 <- blockedBy.get(id2)
-        } in if (`present` blockingNode2 && require(blockingNode2).remove(id).size() == 0) {
-          $Hidden[id]$
+        } in if (`present` blockingNode2 && require(blockingNode2).remove(id1).size() == 0) {
+          $Hidden[id1]$
           Int weight <- `priority.getWeight` id2
           if (weight > 0) {
             \ id2 `pending.setWeight` weight
           } else {
-            // TODO: Should there be a default or error instead? In case the
-            // caller forgot to include the node in the priorities.
-            \ markComplete(id2)
+            fail("node with 0 priority will never be returned")
           }
         }
       }
