@@ -5,10 +5,28 @@ $ModuleOnly$
   outgoing () -> (ReadAt<#self>)
 }
 
+// Example:
+//
+//   GraphQueue<#n> queue <- ...
+//
+//   scoped {
+//     optional #n node <- empty
+//   } cleanup {
+//     // General safeguard in case there's a return or break in the loop.
+//     \ queue.finish(node)
+//   } in while (`present` (node <- queue.exchange(node))) {
+//     // Process node.
+//   }
 @value interface GraphQueue<#n> {
   isEmpty () -> (Bool)
   finish (optional #n) -> ()
   exchange (optional #n) -> (optional #n)
+}
+
+@value interface BlockingGraphQueue<#n> {
+  refines GraphQueue<#n>
+
+  timedExchange (optional #n,Float) -> (optional #n)
 }
 
 concrete TopoSort<#n,#id> {
@@ -32,7 +50,7 @@ concrete TopoSort<#n,#id> {
   // - All input nodes *must* have unique IDs.
   // - The input does not need to include all nodes in the graph. Only nodes
   //   included in the input will be used, even if others are reachable.
-  @value graphQueue (ReadAt<#n>,Generator<Float>) -> (GraphQueue<#n>)
+  @value graphQueue (ReadAt<#n>,Generator<Float>) -> (BlockingGraphQueue<#n>)
 
   // Notes:
   // - The input does not need to include all nodes in the graph.

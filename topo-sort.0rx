@@ -123,13 +123,17 @@ concrete DependencyQueue<#n,#id> {
     #id immutable
     #id defines LessThan<#id>
     #n requires GraphNode<#id>
-  (ReadAt<#n>,CategoricalReader<#id>,KVReader<#id,DefaultOrder<#id>>,Generator<Float>) -> (GraphQueue<#n>)
+  (ReadAt<#n>,
+   CategoricalReader<#id>,
+   KVReader<#id,DefaultOrder<#id>>,
+   Generator<Float>) ->
+  (BlockingGraphQueue<#n>)
 }
 
 define DependencyQueue {
   $ReadOnly[condition,priority,pending,generator,idToNode,blocking,blockedBy]$
 
-  refines GraphQueue<#n>
+  refines BlockingGraphQueue<#n>
 
   @value [ConditionWait&ConditionResume] condition
 
@@ -214,6 +218,15 @@ define DependencyQueue {
   }
 
   exchange (complete) {
+    return exchangeCommon(complete,empty)
+  }
+
+  timedExchange (complete,timeout) {
+    return exchangeCommon(complete,timeout)
+  }
+
+  @value exchangeCommon (optional #n,optional Float) -> (optional #n)
+  exchangeCommon (complete,timeout) {
     scoped {
       MutexLock lock <- MutexLock.lock(condition)
     } cleanup {
@@ -223,7 +236,13 @@ define DependencyQueue {
         \ markComplete(require(complete).getId())
       }
       while (shouldBlock()) {
-        \ condition.wait()
+        if (`present` timeout) {
+          if (!condition.timedWait(`require` timeout)) {
+            break
+          }
+        } else {
+          \ condition.wait()
+        }
       }
       if (generator.isEmpty()) {
         return empty
