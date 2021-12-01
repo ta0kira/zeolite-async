@@ -30,9 +30,10 @@ $ModuleOnly$
 }
 
 concrete TopoSort<#n,#id> {
-  refines LessThan2<#n>
   #id immutable
+  #id defines Equals<#id>
   #id defines LessThan<#id>
+  #id requires Hashed
   #n requires GraphNode<#id>
 
   // Notes:
@@ -40,23 +41,21 @@ concrete TopoSort<#n,#id> {
   // - The input does not need to include all nodes in the graph; however, the
   //   entire graph reachable from the input nodes will be processed.
   // - An outgoing edge is treated as a dependency relationship.
-  // - Storage space is O(n^2).
-  // - Construction complexity is O(n^2 log n).
+  // - Storage space is O(E+V).
+  // - Construction complexity is O(E+V).
   @category relationFrom<#n,#id>
     #id immutable
+    #id defines Equals<#id>
     #id defines LessThan<#id>
+    #id requires Hashed
     #n requires GraphNode<#id>
   (ReadAt<#n>) -> (TopoSort<#n,#id>)
 
   // Notes:
   // - The input does not need to include all nodes in the graph. All nodes that
   //   are reachable from the provided nodes will be added to the queue.
-  // - Storage space is O(n^2).
-  // - Construction complexity is O(n^2 log n).
+  // - Storage space is O(E+V).
+  // - Construction complexity is O(E+V).
+  // - Queue iteration complexity is O(E+V log V).
   @value graphQueue (ReadAt<#id>,Generator<Float>) -> (BlockingGraphQueue<#n>)
-
-  // Notes:
-  // - The input does not need to include all nodes in the graph.
-  // - Complexity is O(n^2 log n).
-  @value isSorted (ReadAt<#n>) -> (Bool)
 }

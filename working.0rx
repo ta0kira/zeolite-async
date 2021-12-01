@@ -35,10 +35,17 @@ define TopoTest {
         .append(node7)
     $ReadOnly[allNodes,node1,node2,node3,node4,node5,node6,node7]$
 
+//     Vector<TestNode> allNodes <- Vector<TestNode>.new()
+//     traverse (Counter.zeroIndexed(1000) -> Int id) {
+//       \ allNodes.append(TestNode.new(id,allNodes.duplicate()))
+//     }
+
     TopoSort<TestNode,Int> topoSort <- `TopoSort:relationFrom<?,Int>` allNodes
+//     TopoSort<TestNode,Int> topoSort <- `TopoSort:relationFrom<?,Int>` allNodes
     $Hidden[allNodes]$
 
     ReadAt<Int> nodes <- Vector<Int>.new()
+//           .append(999)
         .append(1)
         .append(2)
         .append(3)
@@ -55,9 +62,12 @@ define TopoTest {
       } cleanup {
         \ queue.finish(node)
       } in while (`present` (node <- queue.exchange(node))) {
+      \ BasicOutput.stderr()
+          .write(".")
+          .flush()
         \ copy.append(`require` node)
       }
-      \ formatNodes(copy,topoSort)
+      \ formatNodes(copy)
       \ BasicOutput.stderr()
           .write(i)
           .write("\n")
@@ -65,8 +75,8 @@ define TopoTest {
     }
   }
 
-  @type formatNodes (ReadAt<TestNode>,TopoSort<TestNode,Int>) -> ()
-  formatNodes (nodes,topoSort) {
+  @type formatNodes (ReadAt<TestNode>) -> ()
+  formatNodes (nodes) {
     traverse (`ReadAtH:forwardOrder` nodes -> TestNode node) {
       \ BasicOutput.stdout()
           .write(node.getId())
@@ -74,7 +84,6 @@ define TopoTest {
           .flush()
     }
     \ BasicOutput.stdout()
-        .write(`topoSort.isSorted` nodes)
         .write("\n")
         .flush()
   }

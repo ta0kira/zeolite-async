@@ -1,143 +1,59 @@
-define TopoSort {
-  $ReadOnly[blocking,blockedBy,weights,idToNode]$
+concrete BidirectionalNode<#id> {
+  refines Duplicate
+  #id immutable
+  #id defines Equals<#id>
+  #id requires Hashed
 
-  @value KVReader<#id,[DefaultOrder<#id>&SetReader<#id>]> blocking
-  @value KVReader<#id,DefaultOrder<#id>> blockedBy
-  @value CategoricalReader<#id> weights
+  @type new () -> (#self)
+  @value addBlocker (#id) -> ()
+  @value addBlocking (#id) -> ()
+  @value removeBlocker (#id) -> ()
+  @value blockerCount () -> (Int)
+  @value blockingCount () -> (Int)
+  @value blockers () -> (DefaultOrder<#id>)
+  @value blocking () -> (DefaultOrder<#id>)
+}
+
+define BidirectionalNode {
+  @value HashSet<#id> blockers
+  @value HashSet<#id> blocking
+
+  new () { return #self{ HashSet<#id>.new(), HashSet<#id>.new() } }
+  addBlocker (id) { \ blockers.add(id) }
+  addBlocking (id) { \ blocking.add(id) }
+  removeBlocker (id) { \ blockers.remove(id) }
+  blockerCount () { return blockers.size() }
+  blockingCount () { return blocking.size() }
+  blockers () { return blockers }
+  blocking () { return blocking }
+  duplicate () { return #self{ blockers.duplicate(), blocking } }
+}
+
+define TopoSort {
+  @value KVReader<#id,BidirectionalNode<#id>> graph
   @value KVReader<#id,#n> idToNode
 
   relationFrom (source) {
-    SearchTree<#id,TreeSet<#id>> blocking,
-    SearchTree<#id,TreeSet<#id>> blockedBy,
-    SearchTree<#id,#n> idToNode,
-    CategoricalTree<#id> weights <-
-        RelationBuilder<#n,#id>.buildFrom(source)
-    return TopoSort<#n,#id>{ blocking, blockedBy, weights, idToNode }
+    HashTable<#id,BidirectionalNode<#id>> graph <- HashTable<#id,BidirectionalNode<#id>>.new()
+    HashTable<#id,#n> idToNode <- HashTable<#id,#n>.new()
+
+    traverse (`ReadAtH:forwardOrder` source -> #n node1) {
+      #id id1 <- node1.getId()
+      \ id1 `idToNode.set` node1
+      BidirectionalNode<#id> actual1 <- id1 `graph.weakSet` BidirectionalNode<#id>.new()
+      traverse (`ReadAtH:forwardOrder` node1.outgoing() -> #n node2) {
+        #id id2 <- node2.getId()
+        BidirectionalNode<#id> actual2 <- id2 `graph.weakSet` BidirectionalNode<#id>.new()
+        \ actual1.addBlocker(id2)
+        \ actual2.addBlocking(id1)
+      }
+    }
+
+    return TopoSort<#n,#id>{ graph, idToNode }
   }
 
   graphQueue (source,random) {
-    return DependencyQueue:new(source,weights,blocking,blockedBy,idToNode,random)
-  }
-
-  isSorted (source) (result) {
-    result <- true
-    scoped {
-      Int i <- 0
-    } in while (i < source.size()-1) {
-      $ReadOnly[i]$
-      scoped {
-        Int j <- i+1
-      } in while (j < source.size()) {
-        $ReadOnly[j]$
-        if (source.readAt(j) `lessThan2` source.readAt(i)) {
-          return false
-        }
-      } update {
-        j <- j+1
-      }
-    } update {
-      i <- i+1
-    }
-  }
-
-  lessThan2 (x,y) {
-    return x.getId() `lessThanId` y.getId()
-  }
-
-  @value lessThanId (#id,#id) -> (Bool)
-  lessThanId (id1,id2) {
-    scoped {
-      optional SetReader<#id> after1 <- blocking.get(id1)
-    } in if (! `present` after1) {
-      return false
-    } else {
-      return require(after1).member(id2)
-    }
-  }
-}
-
-concrete RelationBuilder<#n,#id> {
-  #id immutable
-  #id defines LessThan<#id>
-  #n requires GraphNode<#id>
-
-  @type buildFrom (ReadAt<#n>) -> (SearchTree<#id,TreeSet<#id>>,SearchTree<#id,TreeSet<#id>>,
-                                   SearchTree<#id,#n>,CategoricalTree<#id>)
-}
-
-define RelationBuilder {
-  @value SearchTree<#id,TreeSet<#id>> blocking
-  @value SearchTree<#id,TreeSet<#id>> blockedBy
-  @value SearchTree<#id,#n> idToNode
-  @value CategoricalTree<#id> weights
-
-  buildFrom (source) {
-    return #self{
-        SearchTree<#id,TreeSet<#id>>.new(),
-        SearchTree<#id,TreeSet<#id>>.new(),
-        SearchTree<#id,#n>.new(),
-        CategoricalTree<#id>.new() }.process(source)
-  }
-
-  @value process (ReadAt<#n>) -> (SearchTree<#id,TreeSet<#id>>,SearchTree<#id,TreeSet<#id>>,
-                                  SearchTree<#id,#n>,CategoricalTree<#id>)
-  process (source) (blocking2,blockedBy2,idToNode2,weights2) {
-    blocking2 <- blocking
-    blockedBy2 <- blockedBy
-    weights2 <- weights
-    idToNode2 <- idToNode
-    $Hidden[blocking2,blockedBy2,weights2,idToNode2]$
-    \ collectNodes(source)
-    traverse (idToNode.defaultOrder() -> KeyValue<#id,#n> idNode) {
-      \ weights.incrWeight(idNode.getKey())
-      \ idNode.getKey() `setBlockedBy` idNode.getValue().outgoing()
-    }
-  }
-
-  @value collectNodes (ReadAt<#n>) -> ()
-  collectNodes (nodes) {
-    traverse (`ReadAtH:forwardOrder` nodes -> #n node) {
-      #id id <- node.getId()
-      if (! `present` idToNode.get(id)) {
-        \ id `idToNode.set` node
-        \ collectNodes(node.outgoing())
-      }
-    }
-  }
-
-  @value setBlockedBy (#id,ReadAt<#n>) -> ()
-  setBlockedBy (id1,blockers) {
-    traverse (`ReadAtH:forwardOrder` blockers -> #n node2) {
-      #id id2 <- node2.getId()
-      $ReadOnly[node2,id2]$
-      if (!(id1 `#id.lessThan` id2 || id2 `#id.lessThan` id1)) {
-        fail("cycle detected at node " + FormattedH:try(id1).formatted())
-      }
-      TreeSet<#id> blockedByNode2 <- defer
-      scoped {
-        optional TreeSet<#id> existing <- blocking.get(id2)
-      } in if (`present` existing) {
-        blockedByNode2 <- `require` existing
-      } else {
-        \ id2 `blocking.set` (blockedByNode2 <- TreeSet<#id>.new())
-      }
-      $Hidden[blocking]$
-      if (!blockedByNode2.member(id1)) {
-        \ blockedByNode2.add(id1)
-        $Hidden[blockedByNode2]$
-        \ weights.incrWeight(id2)
-        TreeSet<#id> blockingNode1 <- defer
-        scoped {
-          optional TreeSet<#id> existing <- blockedBy.get(id1)
-        } in if (`present` existing) {
-          blockingNode1 <- `require` existing
-        } else {
-          \ id1 `blockedBy.set` (blockingNode1 <- TreeSet<#id>.new())
-        }
-        \ blockingNode1.add(id2)
-        \ id1 `setBlockedBy` node2.outgoing()
-      }
-    }
+    return DependencyQueue:new(source,random,graph,idToNode)
   }
 }
 
@@ -146,81 +62,45 @@ concrete DependencyQueue<#n,#id> {
 
   @category new<#n,#id>
     #id immutable
+    #id defines Equals<#id>
     #id defines LessThan<#id>
+    #id requires Hashed
     #n requires GraphNode<#id>
-  (ReadAt<#id>,                      // source
-   CategoricalReader<#id>,           // priority
-   KVReader<#id,DefaultOrder<#id>>,  // blocking
-   KVReader<#id,DefaultOrder<#id>>,  // blockedBy
-   KVReader<#id,#n>,                 // idToNode
-   Generator<Float>)                 // random
-  ->
-  (BlockingGraphQueue<#n>)
+  (ReadAt<#id>,Generator<Float>,KVReader<#id,BidirectionalNode<#id>>,KVReader<#id,#n>) -> (BlockingGraphQueue<#n>)
 }
 
 define DependencyQueue {
-  $ReadOnly[condition,priority,pending,generator,idToNode,blocking,blockedBy]$
+  $ReadOnly[condition,pending,generator,idToNode,graph]$
 
   refines BlockingGraphQueue<#n>
 
   @value [ConditionWait&ConditionResume] condition
 
-  @value CategoricalReader<#id> priority
   @value CategoricalTree<#id>   pending
   @value RandomCategorical<#id> generator
 
-  @value SearchTree<#id,#n>              idToNode
-  @value KVReader<#id,DefaultOrder<#id>> blocking
-  @value SearchTree<#id,TreeSet<#id>>    blockedBy
+  @value HashTable<#id,#n>                    idToNode
+  @value KVReader<#id,BidirectionalNode<#id>> graph
 
-  new (source,priority,blocking,blockedBy0,idToNode0,random) {
-    CategoricalTree<#id>         pending   <- CategoricalTree<#id>.new()
-    SearchTree<#id,#n>           idToNode  <- SearchTree<#id,#n>.new()
-    SearchTree<#id,TreeSet<#id>> blockedBy <- SearchTree<#id,TreeSet<#id>>.new()
+  new (source,random,graph0,idToNode0) {
+    CategoricalTree<#id> pending <- CategoricalTree<#id>.new()
 
-    traverse (`ReadAtH:forwardOrder` source -> #id id1) {
-      scoped {
-        optional #n node1 <- idToNode0.get(id1)
-      } in if (`present` node1) {
-        \ id1 `idToNode.set` `require` node1
-      } else {
-        fail("node " + FormattedH:try(id1).formatted() + " is not in the original graph")
-      }
-      scoped {
-        optional DefaultOrder<#id> blockingNode1 <- blockedBy0.get(id1)
-      } in if (`present` blockingNode1) {
-        \ id1 `blockedBy.set` (require(blockingNode1).defaultOrder() `OrderH:copyTo` TreeSet<#id>.new())
-        $Hidden[id1]$
-        traverse (require(blockingNode1).defaultOrder() -> #id id2) {
-          $Hidden[blockingNode1]$
-          if (! `present` idToNode.get(id2)) {
-            \ id2 `idToNode.set` `require` `idToNode0.get` id2
-            scoped {
-              optional DefaultOrder<#id> blockingNode2 <- blockedBy0.get(id2)
-            } in if (`present` blockingNode2) {
-              \ id2 `blockedBy.set` (require(blockingNode2).defaultOrder() `OrderH:copyTo` TreeSet<#id>.new())
-            }
-          }
-        }
-      }
-    }
+    HashTable<#id,BidirectionalNode<#id>> graph, HashTable<#id,#n> idToNode  <-
+        SubgraphBuilder:buildFrom(source,graph0,idToNode0)
+    $Hidden[idToNode0,graph0]$
 
-    traverse (idToNode.defaultOrder() -> KeyValue<#id,any> idNode) {
-      scoped {
-        optional Container blockingNode <- blockedBy.get(idNode.getKey())
-      } in if (! `present` blockingNode || require(blockingNode).size() == 0) {
-        \ idNode.getKey() `pending.setWeight` `priority.getWeight` idNode.getKey()
+    traverse (graph.defaultOrder() -> KeyValue<#id,BidirectionalNode<#id>> idNode) {
+      if (idNode.getValue().blockerCount() == 0) {
+        \ idNode.getKey() `pending.setWeight` idNode.getValue().blockingCount()+1
       }
     }
 
     DependencyQueue<#n,#id> queue <- DependencyQueue<#n,#id>{
         ThreadCondition.new(),
-        priority,
         pending,
         pending `RandomCategorical:sampleWith` random,
         idToNode,
-        blocking,
-        blockedBy }
+        graph }
 
     if (queue.shouldBlock()) {
       fail("queue will never return a node")
@@ -296,20 +176,75 @@ define DependencyQueue {
   markComplete (id1) {
     \ idToNode.remove(id1)
     \ id1 `pending.setWeight` 0
-    scoped {
-      optional DefaultOrder<#id> blockedByNode1 <- blocking.get(id1)
-    } in if (`present` blockedByNode1) {
-      traverse (require(blockedByNode1).defaultOrder() -> #id id2) {
-        scoped {
-          optional TreeSet<#id> blockingNode2 <- blockedBy.get(id2)
-        } in if (`present` blockingNode2 && require(blockingNode2).remove(id1).size() == 0) {
+    traverse (require(graph.get(id1)).blocking().defaultOrder() -> #id id2) {
+      scoped {
+        optional BidirectionalNode<#id> node2 <- graph.get(id2)
+      } in if (`present` node2) {
+        \ require(node2).removeBlocker(id1)
+        if (require(node2).blockerCount() == 0) {
           $Hidden[id1]$
-          \ id2 `pending.setWeight` `priority.getWeight` id2
+          \ id2 `pending.setWeight` require(node2).blockingCount()+1
         }
       }
     }
     if (!shouldBlock()) {
       \ condition.resumeAll()
     }
+  }
+}
+
+concrete SubgraphBuilder<#n,#id> {
+  #id immutable
+  #id defines Equals<#id>
+  #id defines LessThan<#id>
+  #id requires Hashed
+  #n requires GraphNode<#id>
+
+  @category buildFrom<#n,#id>
+    #id immutable
+    #id defines Equals<#id>
+    #id defines LessThan<#id>
+    #id requires Hashed
+    #n requires GraphNode<#id>
+  (ReadAt<#id>,KVReader<#id,BidirectionalNode<#id>>,KVReader<#id,#n>) ->
+  (HashTable<#id,BidirectionalNode<#id>>,HashTable<#id,#n>)
+}
+
+define SubgraphBuilder {
+  $ReadOnly[idToNode0,idToNode,graph0,graph]$
+
+  @value KVReader<#id,BidirectionalNode<#id>> graph0
+  @value KVReader<#id,#n> idToNode0
+  @value HashTable<#id,BidirectionalNode<#id>> graph
+  @value HashTable<#id,#n> idToNode
+
+  buildFrom(source,graph0,idToNode0) {
+    SubgraphBuilder<#n,#id> builder <- SubgraphBuilder<#n,#id>{
+        graph0,
+        idToNode0,
+        HashTable<#id,BidirectionalNode<#id>>.new(),
+        HashTable<#id,#n>.new() }
+    traverse (`ReadAtH:forwardOrder` source -> #id id) {
+      \ builder.addRecursive(id)
+    }
+    return builder.results()
+  }
+
+  @value addRecursive (#id) -> ()
+  addRecursive(id) {
+    if (! `present` idToNode.get(id)) {
+      \ id `idToNode.set` require(idToNode0.get(id))
+      BidirectionalNode<#id> actual <- require(graph0.get(id)).duplicate()
+      \ id `graph.set` actual
+      traverse (actual.blockers().defaultOrder() -> #id id2) {
+        $Hidden[id]$
+        \ addRecursive(id2)
+      }
+    }
+  }
+
+  @value results () -> (HashTable<#id,BidirectionalNode<#id>>,HashTable<#id,#n>)
+  results () {
+    return graph, idToNode
   }
 }
