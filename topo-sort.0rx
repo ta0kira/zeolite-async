@@ -110,6 +110,9 @@ define RelationBuilder {
     traverse (`ReadAtH:forwardOrder` blockers -> #n node2) {
       #id id2 <- node2.getId()
       $ReadOnly[node2,id2]$
+      if (!(id1 `#id.lessThan` id2 || id2 `#id.lessThan` id1)) {
+        fail("cycle detected at node " + FormattedH:try(id1).formatted())
+      }
       TreeSet<#id> blockedByNode2 <- defer
       scoped {
         optional TreeSet<#id> existing <- blocking.get(id2)
@@ -176,7 +179,13 @@ define DependencyQueue {
     SearchTree<#id,TreeSet<#id>> blockedBy <- SearchTree<#id,TreeSet<#id>>.new()
 
     traverse (`ReadAtH:forwardOrder` source -> #id id1) {
-      \ id1 `idToNode.set` `require` `idToNode0.get` id1
+      scoped {
+        optional #n node1 <- idToNode0.get(id1)
+      } in if (`present` node1) {
+        \ id1 `idToNode.set` `require` node1
+      } else {
+        fail("node " + FormattedH:try(id1).formatted() + " is not in the original graph")
+      }
       scoped {
         optional DefaultOrder<#id> blockingNode1 <- blockedBy0.get(id1)
       } in if (`present` blockingNode1) {
@@ -214,7 +223,7 @@ define DependencyQueue {
         blockedBy }
 
     if (queue.shouldBlock()) {
-      fail("DependencyQueue will never return a node")
+      fail("queue will never return a node")
     } else {
       return queue
     }
