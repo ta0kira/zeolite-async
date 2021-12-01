@@ -38,14 +38,14 @@ define TopoTest {
     TopoSort<TestNode,Int> topoSort <- `TopoSort:relationFrom<?,Int>` allNodes
     $Hidden[allNodes]$
 
-    ReadAt<TestNode> nodes <- Vector<TestNode>.new()
-        .append(node1)
-        .append(node2)
-        .append(node3)
-        .append(node4)
-        .append(node5)
-        .append(node6)
-        .append(node7)
+    ReadAt<Int> nodes <- Vector<Int>.new()
+        .append(1)
+        .append(2)
+        .append(3)
+        .append(4)
+        .append(5)
+        .append(6)
+        .append(7)
 
     traverse (`Counter.zeroIndexed` count -> Int i) {
       Vector<TestNode> copy <- Vector<TestNode>.new()

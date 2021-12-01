@@ -1,20 +1,22 @@
 define TopoSort {
-  $ReadOnly[blocking,blockedBy,weights]$
+  $ReadOnly[blocking,blockedBy,weights,idToNode]$
 
   @value KVReader<#id,[DefaultOrder<#id>&SetReader<#id>]> blocking
   @value KVReader<#id,DefaultOrder<#id>> blockedBy
   @value CategoricalReader<#id> weights
+  @value KVReader<#id,#n> idToNode
 
   relationFrom (source) {
     SearchTree<#id,TreeSet<#id>> blocking,
     SearchTree<#id,TreeSet<#id>> blockedBy,
+    SearchTree<#id,#n> idToNode,
     CategoricalTree<#id> weights <-
         RelationBuilder<#n,#id>.buildFrom(source)
-    return TopoSort<#n,#id>{ blocking, blockedBy, weights }
+    return TopoSort<#n,#id>{ blocking, blockedBy, weights, idToNode }
   }
 
   graphQueue (source,random) {
-    return DependencyQueue:new(source,weights,blocking,blockedBy,random)
+    return DependencyQueue:new(source,weights,blocking,blockedBy,idToNode,random)
   }
 
   isSorted (source) (result) {
@@ -59,29 +61,32 @@ concrete RelationBuilder<#n,#id> {
   #id defines LessThan<#id>
   #n requires GraphNode<#id>
 
-  @type buildFrom (ReadAt<#n>) -> (SearchTree<#id,TreeSet<#id>>,SearchTree<#id,TreeSet<#id>>,CategoricalTree<#id>)
+  @type buildFrom (ReadAt<#n>) -> (SearchTree<#id,TreeSet<#id>>,SearchTree<#id,TreeSet<#id>>,
+                                   SearchTree<#id,#n>,CategoricalTree<#id>)
 }
 
 define RelationBuilder {
   @value SearchTree<#id,TreeSet<#id>> blocking
   @value SearchTree<#id,TreeSet<#id>> blockedBy
-  @value CategoricalTree<#id> weights
   @value SearchTree<#id,#n> idToNode
+  @value CategoricalTree<#id> weights
 
   buildFrom (source) {
     return #self{
         SearchTree<#id,TreeSet<#id>>.new(),
         SearchTree<#id,TreeSet<#id>>.new(),
-        CategoricalTree<#id>.new(),
-        SearchTree<#id,#n>.new() }.process(source)
+        SearchTree<#id,#n>.new(),
+        CategoricalTree<#id>.new() }.process(source)
   }
 
-  @value process (ReadAt<#n>) -> (SearchTree<#id,TreeSet<#id>>,SearchTree<#id,TreeSet<#id>>,CategoricalTree<#id>)
-  process (source) (blocking2,blockedBy2,weights2) {
+  @value process (ReadAt<#n>) -> (SearchTree<#id,TreeSet<#id>>,SearchTree<#id,TreeSet<#id>>,
+                                  SearchTree<#id,#n>,CategoricalTree<#id>)
+  process (source) (blocking2,blockedBy2,idToNode2,weights2) {
     blocking2 <- blocking
     blockedBy2 <- blockedBy
     weights2 <- weights
-    $Hidden[blocking2,blockedBy2,weights2]$
+    idToNode2 <- idToNode
+    $Hidden[blocking2,blockedBy2,weights2,idToNode2]$
     \ collectNodes(source)
     traverse (idToNode.defaultOrder() -> KeyValue<#id,#n> idNode) {
       \ weights.incrWeight(idNode.getKey())
@@ -140,11 +145,13 @@ concrete DependencyQueue<#n,#id> {
     #id immutable
     #id defines LessThan<#id>
     #n requires GraphNode<#id>
-  (ReadAt<#n>,
-   CategoricalReader<#id>,
-   KVReader<#id,DefaultOrder<#id>>,
-   KVReader<#id,DefaultOrder<#id>>,
-   Generator<Float>) ->
+  (ReadAt<#id>,                      // source
+   CategoricalReader<#id>,           // priority
+   KVReader<#id,DefaultOrder<#id>>,  // blocking
+   KVReader<#id,DefaultOrder<#id>>,  // blockedBy
+   KVReader<#id,#n>,                 // idToNode
+   Generator<Float>)                 // random
+  ->
   (BlockingGraphQueue<#n>)
 }
 
@@ -163,39 +170,37 @@ define DependencyQueue {
   @value KVReader<#id,DefaultOrder<#id>> blocking
   @value SearchTree<#id,TreeSet<#id>>    blockedBy
 
-  new (source,priority,blocking,blockedBy0,random) {
+  new (source,priority,blocking,blockedBy0,idToNode0,random) {
     CategoricalTree<#id>         pending   <- CategoricalTree<#id>.new()
     SearchTree<#id,#n>           idToNode  <- SearchTree<#id,#n>.new()
     SearchTree<#id,TreeSet<#id>> blockedBy <- SearchTree<#id,TreeSet<#id>>.new()
 
-    traverse (`ReadAtH:forwardOrder` source -> #n node) {
-      #id id <- node.getId()
-      if (priority.getWeight(id) == 0) {
-        fail("node with 0 priority will never be returned")
-      } else {
-        \ node.getId() `idToNode.set` node
-      }
-    }
-
-    traverse (`ReadAtH:forwardOrder` source -> #n node1) {
-      #id id1 <- node1.getId()
-      $Hidden[node1]$
-      $ReadOnly[id1]$
-      TreeSet<#id> blockers <- TreeSet<#id>.new()
+    traverse (`ReadAtH:forwardOrder` source -> #id id1) {
+      \ id1 `idToNode.set` `require` `idToNode0.get` id1
       scoped {
         optional DefaultOrder<#id> blockingNode1 <- blockedBy0.get(id1)
       } in if (`present` blockingNode1) {
-        // TODO: Would it be faster to iterate over idToNode instead?
+        \ id1 `blockedBy.set` (require(blockingNode1).defaultOrder() `OrderH:copyTo` TreeSet<#id>.new())
+        $Hidden[id1]$
         traverse (require(blockingNode1).defaultOrder() -> #id id2) {
-          if (`present` idToNode.get(id2)) {
-            \ blockers.add(id2)
+          $Hidden[blockingNode1]$
+          if (! `present` idToNode.get(id2)) {
+            \ id2 `idToNode.set` `require` `idToNode0.get` id2
+            scoped {
+              optional DefaultOrder<#id> blockingNode2 <- blockedBy0.get(id2)
+            } in if (`present` blockingNode2) {
+              \ id2 `blockedBy.set` (require(blockingNode2).defaultOrder() `OrderH:copyTo` TreeSet<#id>.new())
+            }
           }
         }
       }
-      if (blockers.size() > 0) {
-        \ id1 `blockedBy.set` blockers
-      } else {
-        \ id1 `pending.setWeight` `priority.getWeight` id1
+    }
+
+    traverse (idToNode.defaultOrder() -> KeyValue<#id,any> idNode) {
+      scoped {
+        optional Container blockingNode <- blockedBy.get(idNode.getKey())
+      } in if (! `present` blockingNode || require(blockingNode).size() == 0) {
+        \ idNode.getKey() `pending.setWeight` `priority.getWeight` idNode.getKey()
       }
     }
 
@@ -290,12 +295,7 @@ define DependencyQueue {
           optional TreeSet<#id> blockingNode2 <- blockedBy.get(id2)
         } in if (`present` blockingNode2 && require(blockingNode2).remove(id1).size() == 0) {
           $Hidden[id1]$
-          Int weight <- `priority.getWeight` id2
-          if (weight > 0) {
-            \ id2 `pending.setWeight` weight
-          } else {
-            fail("node with 0 priority will never be returned")
-          }
+          \ id2 `pending.setWeight` `priority.getWeight` id2
         }
       }
     }

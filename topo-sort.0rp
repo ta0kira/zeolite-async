@@ -49,16 +49,11 @@ concrete TopoSort<#n,#id> {
   (ReadAt<#n>) -> (TopoSort<#n,#id>)
 
   // Notes:
-  // - This assumes that all nodes passed here were reachable when the TopoSort
-  //   was originally created.
-  // - The input does not need to include all nodes in the graph. Only nodes
-  //   included in the input will be used, even if others are reachable.
-  // - Transitive dependencies are accounted for even if an intermediate node
-  //   is not in those provided. For example, if x->y->z but y is not included
-  //   here, z still blocks x.
+  // - The input does not need to include all nodes in the graph. All nodes that
+  //   are reachable from the provided nodes will be added to the queue.
   // - Storage space is O(n^2).
   // - Construction complexity is O(n^2 log n).
-  @value graphQueue (ReadAt<#n>,Generator<Float>) -> (BlockingGraphQueue<#n>)
+  @value graphQueue (ReadAt<#id>,Generator<Float>) -> (BlockingGraphQueue<#n>)
 
   // Notes:
   // - The input does not need to include all nodes in the graph.
