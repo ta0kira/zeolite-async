@@ -36,11 +36,21 @@ define TopoTest {
     $ReadOnly[allNodes,node1,node2,node3,node4,node5,node6,node7]$
 
     TopoSort<TestNode,Int> topoSort <- `TopoSort:relationFrom<?,Int>` allNodes
+    $Hidden[allNodes]$
+
+    ReadAt<TestNode> nodes <- Vector<TestNode>.new()
+        .append(node1)
+        .append(node2)
+        .append(node3)
+        .append(node4)
+        .append(node5)
+        .append(node6)
+        .append(node7)
 
     traverse (`Counter.zeroIndexed` count -> Int i) {
       Vector<TestNode> copy <- Vector<TestNode>.new()
       scoped {
-        GraphQueue<TestNode> queue <- allNodes `topoSort.graphQueue` random
+        GraphQueue<TestNode> queue <- nodes `topoSort.graphQueue` random
         optional TestNode node <- empty
       } cleanup {
         \ queue.finish(node)
@@ -56,15 +66,15 @@ define TopoTest {
   }
 
   @type formatNodes (ReadAt<TestNode>,TopoSort<TestNode,Int>) -> ()
-  formatNodes (allNodes,topoSort) {
-    traverse (`ReadAtH:forwardOrder` allNodes -> TestNode node) {
+  formatNodes (nodes,topoSort) {
+    traverse (`ReadAtH:forwardOrder` nodes -> TestNode node) {
       \ BasicOutput.stdout()
           .write(node.getId())
           .write(" ")
           .flush()
     }
     \ BasicOutput.stdout()
-        .write(`topoSort.isSorted` allNodes)
+        .write(`topoSort.isSorted` nodes)
         .write("\n")
         .flush()
   }

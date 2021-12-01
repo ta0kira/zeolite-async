@@ -1,17 +1,20 @@
 define TopoSort {
-  $ReadOnly[blocking,weights]$
+  $ReadOnly[blocking,blockedBy,weights]$
 
   @value KVReader<#id,[DefaultOrder<#id>&SetReader<#id>]> blocking
+  @value KVReader<#id,DefaultOrder<#id>> blockedBy
   @value CategoricalReader<#id> weights
 
   relationFrom (source) {
-    SearchTree<#id,TreeSet<#id>> blocking, CategoricalTree<#id> weights <-
+    SearchTree<#id,TreeSet<#id>> blocking,
+    SearchTree<#id,TreeSet<#id>> blockedBy,
+    CategoricalTree<#id> weights <-
         RelationBuilder<#n,#id>.buildFrom(source)
-    return TopoSort<#n,#id>{ blocking, weights }
+    return TopoSort<#n,#id>{ blocking, blockedBy, weights }
   }
 
   graphQueue (source,random) {
-    return DependencyQueue:new(source,weights,blocking,random)
+    return DependencyQueue:new(source,weights,blocking,blockedBy,random)
   }
 
   isSorted (source) (result) {
@@ -56,26 +59,29 @@ concrete RelationBuilder<#n,#id> {
   #id defines LessThan<#id>
   #n requires GraphNode<#id>
 
-  @type buildFrom (ReadAt<#n>) -> (SearchTree<#id,TreeSet<#id>>,CategoricalTree<#id>)
+  @type buildFrom (ReadAt<#n>) -> (SearchTree<#id,TreeSet<#id>>,SearchTree<#id,TreeSet<#id>>,CategoricalTree<#id>)
 }
 
 define RelationBuilder {
   @value SearchTree<#id,TreeSet<#id>> blocking
+  @value SearchTree<#id,TreeSet<#id>> blockedBy
   @value CategoricalTree<#id> weights
   @value SearchTree<#id,#n> idToNode
 
   buildFrom (source) {
     return #self{
         SearchTree<#id,TreeSet<#id>>.new(),
+        SearchTree<#id,TreeSet<#id>>.new(),
         CategoricalTree<#id>.new(),
         SearchTree<#id,#n>.new() }.process(source)
   }
 
-  @value process (ReadAt<#n>) -> (SearchTree<#id,TreeSet<#id>>,CategoricalTree<#id>)
-  process (source) (blocking2,weights2) {
+  @value process (ReadAt<#n>) -> (SearchTree<#id,TreeSet<#id>>,SearchTree<#id,TreeSet<#id>>,CategoricalTree<#id>)
+  process (source) (blocking2,blockedBy2,weights2) {
     blocking2 <- blocking
+    blockedBy2 <- blockedBy
     weights2 <- weights
-    $Hidden[blocking2,weights2]$
+    $Hidden[blocking2,blockedBy2,weights2]$
     \ collectNodes(source)
     traverse (idToNode.defaultOrder() -> KeyValue<#id,#n> idNode) {
       \ weights.incrWeight(idNode.getKey())
@@ -95,8 +101,8 @@ define RelationBuilder {
   }
 
   @value setBlockedBy (#id,ReadAt<#n>) -> ()
-  setBlockedBy (id1,blockedBy) {
-    traverse (`ReadAtH:forwardOrder` blockedBy -> #n node2) {
+  setBlockedBy (id1,blockers) {
+    traverse (`ReadAtH:forwardOrder` blockers -> #n node2) {
       #id id2 <- node2.getId()
       $ReadOnly[node2,id2]$
       TreeSet<#id> blockedByNode2 <- defer
@@ -107,9 +113,20 @@ define RelationBuilder {
       } else {
         \ id2 `blocking.set` (blockedByNode2 <- TreeSet<#id>.new())
       }
+      $Hidden[blocking]$
       if (!blockedByNode2.member(id1)) {
         \ blockedByNode2.add(id1)
+        $Hidden[blockedByNode2]$
         \ weights.incrWeight(id2)
+        TreeSet<#id> blockingNode1 <- defer
+        scoped {
+          optional TreeSet<#id> existing <- blockedBy.get(id1)
+        } in if (`present` existing) {
+          blockingNode1 <- `require` existing
+        } else {
+          \ id1 `blockedBy.set` (blockingNode1 <- TreeSet<#id>.new())
+        }
+        \ blockingNode1.add(id2)
         \ id1 `setBlockedBy` node2.outgoing()
       }
     }
@@ -125,6 +142,7 @@ concrete DependencyQueue<#n,#id> {
     #n requires GraphNode<#id>
   (ReadAt<#n>,
    CategoricalReader<#id>,
+   KVReader<#id,DefaultOrder<#id>>,
    KVReader<#id,DefaultOrder<#id>>,
    Generator<Float>) ->
   (BlockingGraphQueue<#n>)
@@ -145,7 +163,7 @@ define DependencyQueue {
   @value KVReader<#id,DefaultOrder<#id>> blocking
   @value SearchTree<#id,TreeSet<#id>>    blockedBy
 
-  new (source,priority,blocking,random) {
+  new (source,priority,blocking,blockedBy0,random) {
     CategoricalTree<#id>         pending   <- CategoricalTree<#id>.new()
     SearchTree<#id,#n>           idToNode  <- SearchTree<#id,#n>.new()
     SearchTree<#id,TreeSet<#id>> blockedBy <- SearchTree<#id,TreeSet<#id>>.new()
@@ -161,19 +179,21 @@ define DependencyQueue {
 
     traverse (`ReadAtH:forwardOrder` source -> #n node1) {
       #id id1 <- node1.getId()
-      $ReadOnly[node1]$
-      TreeSet<#id> blockingNode1 <- TreeSet<#id>.new()
+      $Hidden[node1]$
       $ReadOnly[id1]$
-      traverse (`ReadAtH:forwardOrder` node1.outgoing() -> #n node2) {
-        #id id2 <- node2.getId()
-        $Hidden[node1,node2]$
-        if (`present` idToNode.get(id2)) {
-          \ blockingNode1.add(id2)
+      TreeSet<#id> blockers <- TreeSet<#id>.new()
+      scoped {
+        optional DefaultOrder<#id> blockingNode1 <- blockedBy0.get(id1)
+      } in if (`present` blockingNode1) {
+        // TODO: Would it be faster to iterate over idToNode instead?
+        traverse (require(blockingNode1).defaultOrder() -> #id id2) {
+          if (`present` idToNode.get(id2)) {
+            \ blockers.add(id2)
+          }
         }
       }
-      $Hidden[node1]$
-      if (blockingNode1.size() > 0) {
-        \ id1 `blockedBy.set` blockingNode1
+      if (blockers.size() > 0) {
+        \ id1 `blockedBy.set` blockers
       } else {
         \ id1 `pending.setWeight` `priority.getWeight` id1
       }

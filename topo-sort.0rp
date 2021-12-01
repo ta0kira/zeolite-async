@@ -40,6 +40,8 @@ concrete TopoSort<#n,#id> {
   // - The input does not need to include all nodes in the graph; however, the
   //   entire graph reachable from the input nodes will be processed.
   // - An outgoing edge is treated as a dependency relationship.
+  // - Storage space is O(n^2).
+  // - Construction complexity is O(n^2 log n).
   @category relationFrom<#n,#id>
     #id immutable
     #id defines LessThan<#id>
@@ -47,12 +49,19 @@ concrete TopoSort<#n,#id> {
   (ReadAt<#n>) -> (TopoSort<#n,#id>)
 
   // Notes:
-  // - All input nodes *must* have unique IDs.
+  // - This assumes that all nodes passed here were reachable when the TopoSort
+  //   was originally created.
   // - The input does not need to include all nodes in the graph. Only nodes
   //   included in the input will be used, even if others are reachable.
+  // - Transitive dependencies are accounted for even if an intermediate node
+  //   is not in those provided. For example, if x->y->z but y is not included
+  //   here, z still blocks x.
+  // - Storage space is O(n^2).
+  // - Construction complexity is O(n^2 log n).
   @value graphQueue (ReadAt<#n>,Generator<Float>) -> (BlockingGraphQueue<#n>)
 
   // Notes:
   // - The input does not need to include all nodes in the graph.
+  // - Complexity is O(n^2 log n).
   @value isSorted (ReadAt<#n>) -> (Bool)
 }
