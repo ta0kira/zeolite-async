@@ -12,6 +12,7 @@ $ModuleOnly$
 }
 
 concrete TopoSort<#n,#id> {
+  refines LessThan2<#n>
   #id immutable
   #id defines LessThan<#id>
   #n requires GraphNode<#id>

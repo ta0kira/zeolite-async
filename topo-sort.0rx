@@ -1,8 +1,6 @@
 define TopoSort {
   $ReadOnly[reachableFrom,weights]$
 
-  refines LessThan2<#n>
-
   @value KVReader<#id,[DefaultOrder<#id>&SetReader<#id>]> reachableFrom
   @value CategoricalReader<#id> weights
 
@@ -117,11 +115,11 @@ concrete DependencyQueue<#n,#id> {
 }
 
 define DependencyQueue {
-  $ReadOnly[mutex,priority,pending,generator,idToNode,blocking,blockedBy]$
+  $ReadOnly[condition,priority,pending,generator,idToNode,blocking,blockedBy]$
 
   refines GraphQueue<#n>
 
-  @value Mutex mutex
+  @value [ConditionWait&ConditionResume] condition
 
   @value CategoricalReader<#id> priority
   @value CategoricalTree<#id>   pending
@@ -161,7 +159,7 @@ define DependencyQueue {
     }
 
     return DependencyQueue<#n,#id>{
-        SimpleMutex.new(),
+        ThreadCondition.new(),
         priority,
         pending,
         pending `RandomCategorical:sampleWith` random,
@@ -172,7 +170,8 @@ define DependencyQueue {
 
   isEmpty () {
     scoped {
-      MutexLock lock <- MutexLock.lock(mutex)
+      MutexLock lock <- MutexLock.lock(condition)
+      $Hidden[condition]$
     } cleanup {
       \ lock.freeResource()
     } in return idToNode.size() == 0
@@ -180,7 +179,8 @@ define DependencyQueue {
 
   finish (complete) {
     scoped {
-      MutexLock lock <- MutexLock.lock(mutex)
+      MutexLock lock <- MutexLock.lock(condition)
+      $Hidden[condition]$
     } cleanup {
       \ lock.freeResource()
     } in {
@@ -192,22 +192,28 @@ define DependencyQueue {
 
   exchange (complete) {
     scoped {
-      MutexLock lock <- MutexLock.lock(mutex)
+      MutexLock lock <- MutexLock.lock(condition)
     } cleanup {
       \ lock.freeResource()
     } in {
       if (`present` complete) {
         \ markComplete(require(complete).getId())
       }
+      while (shouldBlock()) {
+        \ condition.wait()
+      }
       if (generator.isEmpty()) {
-        // TODO: If there are multiple threads, this might not actually indicate
-        // that there are no more nodes to process.
         return empty
       } else {
         #id id <- generator.generate()
         return idToNode.get(id)
       }
     }
+  }
+
+  @value shouldBlock () -> (Bool)
+  shouldBlock () {
+    return generator.isEmpty() && idToNode.size() > 0
   }
 
   @value markComplete (#id) -> ()
@@ -232,6 +238,9 @@ define DependencyQueue {
           }
         }
       }
+    }
+    if (!shouldBlock()) {
+      \ condition.resumeAll()
     }
   }
 }
