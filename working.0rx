@@ -4,13 +4,53 @@ concrete TopoTest {
 
 define TopoTest {
   run () {
+    if (Argv.global().size() < 2 || Argv.global().size() > 3) {
+      fail(Argv.global().readAt(0) + " (\"small\"|[size]) (count)")
+    }
+
+    TopoSort<TestNode,Int> topoSort, ReadAt<Int> nodes <- defer
+    if (Argv.global().readAt(1) == "small") {
+      topoSort, nodes <- constructSmall()
+    } else {
+      topoSort, nodes <- `constructLarge` ParseChars.int(Argv.global().readAt(1)).getValue()
+    }
+
     Int count <- 1000
-    if (Argv.global().size() > 1) {
-      count <- ParseChars.int(Argv.global().readAt(1)).getValue()
+    if (Argv.global().size() >= 3) {
+      count <- ParseChars.int(Argv.global().readAt(2)).getValue()
     }
 
     Generator<Float> random <- RandomUniform.probability().setSeed(Realtime.monoSeconds().asInt())
 
+    traverse (`Counter.zeroIndexed` count -> Int i) {
+      GraphQueue<TestNode> queue <- nodes `topoSort.graphQueue` random
+      \ BasicOutput.stderr().writeNow("queue built...\n")
+      DefaultOrder<TestNode> copy <- queue `processQueue` Vector<TestNode>.new()
+      \ formatNodes(copy)
+      \ BasicOutput.stderr()
+          .write(i)
+          .write("\n")
+          .flush()
+    }
+  }
+
+  @type processQueue (GraphQueue<TestNode>,[Append<TestNode>&DefaultOrder<TestNode>]) -> (DefaultOrder<TestNode>)
+  processQueue (queue,output) (result) {
+    result <- output
+    scoped {
+      optional TestNode node <- empty
+    } cleanup {
+      \ queue.finish(node)
+    } in while (`present` (node <- queue.exchange(node))) {
+    \ BasicOutput.stderr()
+        .write(".")
+        .flush()
+      \ output.append(`require` node)
+    }
+  }
+
+  @type constructSmall () -> (TopoSort<TestNode,Int>,ReadAt<Int>)
+  constructSmall () (topoSort,nodes) {
     TestNode node1 <- TestNode.new(1,Vector<TestNode>.new())
     TestNode node2 <- TestNode.new(2,Vector<TestNode>.new())
     TestNode node3 <- TestNode.new(3,Vector<TestNode>.new()
@@ -25,7 +65,7 @@ define TopoTest {
     TestNode node7 <- TestNode.new(7,Vector<TestNode>.new()
         .append(node6))
 
-    ReadAt<TestNode> allNodes <- Vector<TestNode>.new()
+    topoSort <- `TopoSort:relationFrom<?,Int>` Vector<TestNode>.new()
         .append(node1)
         .append(node2)
         .append(node3)
@@ -33,19 +73,8 @@ define TopoTest {
         .append(node5)
         .append(node6)
         .append(node7)
-    $ReadOnly[allNodes,node1,node2,node3,node4,node5,node6,node7]$
 
-//     Vector<TestNode> allNodes <- Vector<TestNode>.new()
-//     traverse (Counter.zeroIndexed(1000) -> Int id) {
-//       \ allNodes.append(TestNode.new(id,allNodes.duplicate()))
-//     }
-
-    TopoSort<TestNode,Int> topoSort <- `TopoSort:relationFrom<?,Int>` allNodes
-//     TopoSort<TestNode,Int> topoSort <- `TopoSort:relationFrom<?,Int>` allNodes
-    $Hidden[allNodes]$
-
-    ReadAt<Int> nodes <- Vector<Int>.new()
-//           .append(999)
+    nodes <- Vector<Int>.new()
         .append(1)
         .append(2)
         .append(3)
@@ -53,31 +82,23 @@ define TopoTest {
         .append(5)
         .append(6)
         .append(7)
-
-    traverse (`Counter.zeroIndexed` count -> Int i) {
-      Vector<TestNode> copy <- Vector<TestNode>.new()
-      scoped {
-        GraphQueue<TestNode> queue <- nodes `topoSort.graphQueue` random
-        optional TestNode node <- empty
-      } cleanup {
-        \ queue.finish(node)
-      } in while (`present` (node <- queue.exchange(node))) {
-      \ BasicOutput.stderr()
-          .write(".")
-          .flush()
-        \ copy.append(`require` node)
-      }
-      \ formatNodes(copy)
-      \ BasicOutput.stderr()
-          .write(i)
-          .write("\n")
-          .flush()
-    }
   }
 
-  @type formatNodes (ReadAt<TestNode>) -> ()
+  @type constructLarge (Int) -> (TopoSort<TestNode,Int>,ReadAt<Int>)
+  constructLarge (size) (topoSort,nodes) {
+    Vector<TestNode> allNodes <- Vector<TestNode>.new()
+    traverse (Counter.zeroIndexed(size) -> Int id) {
+      \ allNodes.append(TestNode.new(id,allNodes.duplicate()))
+    }
+    \ BasicOutput.stderr().writeNow("graph built...\n")
+    topoSort <- `TopoSort:relationFrom<?,Int>` allNodes
+    \ BasicOutput.stderr().writeNow("topo built...\n")
+    nodes <- Vector<Int>.new().append(size-1)
+  }
+
+  @type formatNodes (DefaultOrder<TestNode>) -> ()
   formatNodes (nodes) {
-    traverse (`ReadAtH:forwardOrder` nodes -> TestNode node) {
+    traverse (nodes.defaultOrder() -> TestNode node) {
       \ BasicOutput.stdout()
           .write(node.getId())
           .write(" ")
