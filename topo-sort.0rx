@@ -1,4 +1,5 @@
 concrete BidirectionalNode<#id> {
+  refines BlockerNode<#id>
   refines Duplicate
   #id immutable
   #id defines Equals<#id>
@@ -9,9 +10,7 @@ concrete BidirectionalNode<#id> {
   @value addBlocking (#id) -> ()
   @value removeBlocker (#id) -> ()
   @value blockerCount () -> (Int)
-  @value blockingCount () -> (Int)
   @value blockers () -> (DefaultOrder<#id>)
-  @value blocking () -> (DefaultOrder<#id>)
 }
 
 define BidirectionalNode {
@@ -53,15 +52,17 @@ define TopoSort {
   }
 
   graphQueue (source,random) {
-    return DependencyQueue:new(source,random,graph,idToNode)
+    return DependencyQueue:new<#p,#n,#id>(source,random,graph,idToNode)
   }
 }
 
-concrete DependencyQueue<#n,#id> {
+concrete DependencyQueue<#p,#n,#id> {
+  #p defines PriorityPolicy<#id>
   #n requires GraphNode<#id>
 
-  @category new<#n,#id>
+  @category new<#p,#n,#id>
     #id immutable
+    #p defines PriorityPolicy<#id>
     #id defines Equals<#id>
     #id defines LessThan<#id>
     #id requires Hashed
@@ -91,11 +92,11 @@ define DependencyQueue {
 
     traverse (graph.defaultOrder() -> KeyValue<#id,BidirectionalNode<#id>> idNode) {
       if (idNode.getValue().blockerCount() == 0) {
-        \ idNode.getKey() `pending.setWeight` idNode.getValue().blockingCount()+1
+        \ idNode.getKey() `pending.setWeight` #p.nodeWeight(idNode.getKey(),graph)
       }
     }
 
-    DependencyQueue<#n,#id> queue <- DependencyQueue<#n,#id>{
+    DependencyQueue<#p,#n,#id> queue <- DependencyQueue<#p,#n,#id>{
         ThreadCondition.new(),
         pending,
         pending `RandomCategorical:sampleWith` random,
@@ -183,7 +184,9 @@ define DependencyQueue {
         \ require(node2).removeBlocker(id1)
         if (require(node2).blockerCount() == 0) {
           $Hidden[id1]$
-          \ id2 `pending.setWeight` require(node2).blockingCount()+1
+          // TODO: This call blocks the queue, but it can't continue until the
+          // weight is set.
+          \ id2 `pending.setWeight` #p.nodeWeight(id2,graph)
         }
       }
     }

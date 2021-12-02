@@ -29,6 +29,15 @@ $ModuleOnly$
   timedExchange (optional #n,Float) -> (optional #n)
 }
 
+@value interface BlockerNode<|#id> {
+  blockingCount () -> (Int)
+  blocking () -> (DefaultOrder<#id>)
+}
+
+@type interface PriorityPolicy<#id> {
+  nodeWeight (#id,KVReader<#id,BlockerNode<#id>>) -> (Int)
+}
+
 concrete TopoSort<#n,#id> {
   #id immutable
   #id defines Equals<#id>
@@ -57,5 +66,7 @@ concrete TopoSort<#n,#id> {
   // - Storage space is O(E+V).
   // - Construction complexity is O(E+V).
   // - Queue iteration complexity is O(E+V log V).
-  @value graphQueue (ReadAt<#id>,Generator<Float>) -> (BlockingGraphQueue<#n>)
+  @value graphQueue<#p>
+    #p defines PriorityPolicy<#id>
+  (ReadAt<#id>,Generator<Float>) -> (BlockingGraphQueue<#n>)
 }

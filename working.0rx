@@ -23,7 +23,7 @@ define TopoTest {
     Generator<Float> random <- RandomUniform.probability().setSeed(Realtime.monoSeconds().asInt())
 
     traverse (`Counter.zeroIndexed` count -> Int i) {
-      GraphQueue<TestNode> queue <- nodes `topoSort.graphQueue` random
+      GraphQueue<TestNode> queue <- nodes `topoSort.graphQueue<ByTransitiveCount>` random
       \ BasicOutput.stderr().writeNow("queue built...\n")
       DefaultOrder<TestNode> copy <- queue `processQueue` Vector<TestNode>.new()
       \ formatNodes(copy)
@@ -107,6 +107,49 @@ define TopoTest {
     \ BasicOutput.stdout()
         .write("\n")
         .flush()
+  }
+}
+
+concrete ByTransitiveCount {
+  defines PriorityPolicy<Int>
+}
+
+define ByTransitiveCount {
+  nodeWeight (id,blocking) {
+    HashSet<Int> unique <- HashSet<Int>.new()
+    \ collect(id,blocking,unique)
+    return unique.size()
+  }
+
+  @type collect (Int,KVReader<Int,BlockerNode<Int>>,HashSet<Int>) -> ()
+  collect (id,blocking,unique) {
+    if (! `unique.member` id) {
+      \ unique.add(id)
+      traverse (require(blocking.get(id)).blocking().defaultOrder() -> Int id2) {
+        $Hidden[id]$
+        \ collect(id2,blocking,unique)
+      }
+    }
+  }
+}
+
+concrete ByBlockingCount {
+  defines PriorityPolicy<Int>
+}
+
+define ByBlockingCount {
+  nodeWeight (id,blocking) {
+    return require(blocking.get(id)).blockingCount()+1
+  }
+}
+
+concrete ConstantPriority {
+  defines PriorityPolicy<Int>
+}
+
+define ConstantPriority {
+  nodeWeight (_,_) {
+    return 1
   }
 }
 
