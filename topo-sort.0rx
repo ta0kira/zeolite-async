@@ -14,10 +14,10 @@ concrete BidirectionalNode<#id> {
 }
 
 define BidirectionalNode {
-  @value HashSet<#id> blockers
-  @value HashSet<#id> blocking
+  @value HashedSet<#id> blockers
+  @value HashedSet<#id> blocking
 
-  new () { return #self{ HashSet<#id>.new(), HashSet<#id>.new() } }
+  new () { return #self{ HashedSet<#id>.new(), HashedSet<#id>.new() } }
   addBlocker (id) { \ blockers.add(id) }
   addBlocking (id) { \ blocking.add(id) }
   removeBlocker (id) { \ blockers.remove(id) }
@@ -33,8 +33,8 @@ define TopoSort {
   @value KVReader<#id,#n> idToNode
 
   relationFrom (source) {
-    HashTable<#id,BidirectionalNode<#id>> graph <- HashTable<#id,BidirectionalNode<#id>>.new()
-    HashTable<#id,#n> idToNode <- HashTable<#id,#n>.new()
+    HashedMap<#id,BidirectionalNode<#id>> graph <- HashedMap<#id,BidirectionalNode<#id>>.new()
+    HashedMap<#id,#n> idToNode <- HashedMap<#id,#n>.new()
 
     traverse (`ReadAtH:forwardOrder` source -> #n node1) {
       #id id1 <- node1.getId()
@@ -80,13 +80,13 @@ define DependencyQueue {
   @value CategoricalTree<#id>   pending
   @value RandomCategorical<#id> generator
 
-  @value HashTable<#id,#n>                    idToNode
+  @value HashedMap<#id,#n>                    idToNode
   @value KVReader<#id,BidirectionalNode<#id>> graph
 
   new (source,random,graph0,idToNode0) {
     CategoricalTree<#id> pending <- CategoricalTree<#id>.new()
 
-    HashTable<#id,BidirectionalNode<#id>> graph, HashTable<#id,#n> idToNode  <-
+    HashedMap<#id,BidirectionalNode<#id>> graph, HashedMap<#id,#n> idToNode  <-
         SubgraphBuilder:buildFrom(source,graph0,idToNode0)
     $Hidden[idToNode0,graph0]$
 
@@ -210,7 +210,7 @@ concrete SubgraphBuilder<#n,#id> {
     #id requires Hashed
     #n requires GraphNode<#id>
   (ReadAt<#id>,KVReader<#id,BidirectionalNode<#id>>,KVReader<#id,#n>) ->
-  (HashTable<#id,BidirectionalNode<#id>>,HashTable<#id,#n>)
+  (HashedMap<#id,BidirectionalNode<#id>>,HashedMap<#id,#n>)
 }
 
 define SubgraphBuilder {
@@ -218,15 +218,15 @@ define SubgraphBuilder {
 
   @value KVReader<#id,BidirectionalNode<#id>> graph0
   @value KVReader<#id,#n> idToNode0
-  @value HashTable<#id,BidirectionalNode<#id>> graph
-  @value HashTable<#id,#n> idToNode
+  @value HashedMap<#id,BidirectionalNode<#id>> graph
+  @value HashedMap<#id,#n> idToNode
 
   buildFrom(source,graph0,idToNode0) {
     SubgraphBuilder<#n,#id> builder <- SubgraphBuilder<#n,#id>{
         graph0,
         idToNode0,
-        HashTable<#id,BidirectionalNode<#id>>.new(),
-        HashTable<#id,#n>.new() }
+        HashedMap<#id,BidirectionalNode<#id>>.new(),
+        HashedMap<#id,#n>.new() }
     traverse (`ReadAtH:forwardOrder` source -> #id id) {
       \ builder.addRecursive(id)
     }
@@ -246,7 +246,7 @@ define SubgraphBuilder {
     }
   }
 
-  @value results () -> (HashTable<#id,BidirectionalNode<#id>>,HashTable<#id,#n>)
+  @value results () -> (HashedMap<#id,BidirectionalNode<#id>>,HashedMap<#id,#n>)
   results () {
     return graph, idToNode
   }

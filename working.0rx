@@ -116,12 +116,12 @@ concrete ByTransitiveCount {
 
 define ByTransitiveCount {
   nodeWeight (id,blocking) {
-    HashSet<Int> unique <- HashSet<Int>.new()
+    HashedSet<Int> unique <- HashedSet<Int>.new()
     \ collect(id,blocking,unique)
     return unique.size()
   }
 
-  @type collect (Int,KVReader<Int,BlockerNode<Int>>,HashSet<Int>) -> ()
+  @type collect (Int,KVReader<Int,BlockerNode<Int>>,HashedSet<Int>) -> ()
   collect (id,blocking,unique) {
     if (! `unique.member` id) {
       \ unique.add(id)
