@@ -56,8 +56,7 @@ define TopoSort {
   }
 }
 
-concrete DependencyQueue<#p,#n,#id> {
-  #p defines PriorityPolicy<#id>
+concrete DependencyQueue<#n,#id> {
   #n requires GraphNode<#id>
 
   @category new<#p,#n,#id>
@@ -77,6 +76,7 @@ define DependencyQueue {
 
   @value [ConditionWait&ConditionResume] condition
 
+  @value Priority<#id>          priority
   @value CategoricalTree<#id>   pending
   @value RandomCategorical<#id> generator
 
@@ -90,14 +90,17 @@ define DependencyQueue {
         SubgraphBuilder:buildFrom(source,graph0,idToNode0)
     $Hidden[idToNode0,graph0]$
 
+    Priority<#id> priority <- #p.new(graph)
+
     traverse (graph.defaultOrder() -> KeyValue<#id,BidirectionalNode<#id>> idNode) {
       if (idNode.getValue().blockerCount() == 0) {
-        \ idNode.getKey() `pending.setWeight` #p.nodeWeight(idNode.getKey(),graph)
+        \ idNode.getKey() `pending.setWeight` priority.nodePriority(idNode.getKey())
       }
     }
 
-    DependencyQueue<#p,#n,#id> queue <- DependencyQueue<#p,#n,#id>{
+    DependencyQueue<#n,#id> queue <- DependencyQueue<#n,#id>{
         ThreadCondition.new(),
+        priority,
         pending,
         pending `RandomCategorical:sampleWith` random,
         idToNode,
@@ -184,9 +187,7 @@ define DependencyQueue {
         \ require(node2).removeBlocker(id1)
         if (require(node2).blockerCount() == 0) {
           $Hidden[id1]$
-          // TODO: This call blocks the queue, but it can't continue until the
-          // weight is set.
-          \ id2 `pending.setWeight` #p.nodeWeight(id2,graph)
+          \ id2 `pending.setWeight` priority.nodePriority(id2)
         }
       }
     }

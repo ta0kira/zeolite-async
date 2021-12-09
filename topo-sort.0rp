@@ -34,8 +34,12 @@ $ModuleOnly$
   blocking () -> (DefaultOrder<#id>)
 }
 
+@value interface Priority<#id|> {
+  nodePriority (#id) -> (Int)
+}
+
 @type interface PriorityPolicy<#id> {
-  nodeWeight (#id,KVReader<#id,BlockerNode<#id>>) -> (Int)
+  new ([KVReader<#id,BlockerNode<#id>>&DefaultOrder<KeyValue<#id,BlockerNode<#id>>>]) -> (Priority<#id>)
 }
 
 concrete TopoSort<#n,#id> {
