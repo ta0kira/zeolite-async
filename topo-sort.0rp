@@ -2,7 +2,7 @@ $ModuleOnly$
 
 @value interface GraphNode<|#id> {
   getId () -> (#id)
-  outgoing () -> (ReadAt<#self>)
+  outgoing () -> (DefaultOrder<#self>)
 }
 
 // Example:

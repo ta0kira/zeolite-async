@@ -40,7 +40,7 @@ define TopoSort {
       #id id1 <- node1.getId()
       \ id1 `idToNode.set` node1
       BidirectionalNode<#id> actual1 <- id1 `graph.weakSet` BidirectionalNode<#id>.new()
-      traverse (`ReadAtH:forwardOrder` node1.outgoing() -> #n node2) {
+      traverse (node1.outgoing().defaultOrder() -> #n node2) {
         #id id2 <- node2.getId()
         BidirectionalNode<#id> actual2 <- id2 `graph.weakSet` BidirectionalNode<#id>.new()
         \ actual1.addBlocker(id2)

@@ -23,7 +23,7 @@ define TopoTest {
     Generator<Float> random <- RandomUniform.probability().setSeed(Realtime.monoSeconds().asInt())
 
     traverse (`Counter.zeroIndexed` count -> Int i) {
-      GraphQueue<TestNode> queue <- nodes `topoSort.graphQueue<ByTransitiveCount>` random
+      GraphQueue<TestNode> queue <- nodes `topoSort.graphQueue<ByBlockingCount>` random
       \ BasicOutput.stderr().writeNow("queue built...\n")
       DefaultOrder<TestNode> copy <- queue `processQueue` Vector<TestNode>.new()
       \ formatNodes(copy)
@@ -156,14 +156,14 @@ define ConstantPriority {
 concrete TestNode {
   refines GraphNode<Int>
 
-  @type new (Int,ReadAt<TestNode>) -> (#self)
+  @type new (Int,DefaultOrder<TestNode>) -> (#self)
 }
 
 define TestNode {
   $ReadOnly[id,outgoing]$
 
   @value Int id
-  @value ReadAt<TestNode> outgoing
+  @value DefaultOrder<TestNode> outgoing
 
   new (id,outgoing) {
     return #self{ id, outgoing }
