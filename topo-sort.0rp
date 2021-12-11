@@ -30,8 +30,7 @@ $ModuleOnly$
 }
 
 @value interface BlockerNode<|#id> {
-  blockingCount () -> (Int)
-  blocking () -> (DefaultOrder<#id>)
+  blocking () -> ([Container&DefaultOrder<#id>])
 }
 
 @value interface Priority<#id|> {
@@ -39,7 +38,7 @@ $ModuleOnly$
 }
 
 @type interface PriorityPolicy<#id> {
-  new ([KVReader<#id,BlockerNode<#id>>&DefaultOrder<KeyValue<#id,BlockerNode<#id>>>]) -> (Priority<#id>)
+  new ([KVReader<#id,BlockerNode<#id>>&KeyOrder<#id>]) -> (Priority<#id>)
 }
 
 concrete TopoSort<#n,#id> {

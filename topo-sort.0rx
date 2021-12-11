@@ -9,8 +9,7 @@ concrete BidirectionalNode<#id> {
   @value addBlocker (#id) -> ()
   @value addBlocking (#id) -> ()
   @value removeBlocker (#id) -> ()
-  @value blockerCount () -> (Int)
-  @value blockers () -> (DefaultOrder<#id>)
+  @value blockers () -> ([Container&DefaultOrder<#id>])
 }
 
 define BidirectionalNode {
@@ -21,8 +20,6 @@ define BidirectionalNode {
   addBlocker (id) { \ blockers.add(id) }
   addBlocking (id) { \ blocking.add(id) }
   removeBlocker (id) { \ blockers.remove(id) }
-  blockerCount () { return blockers.size() }
-  blockingCount () { return blocking.size() }
   blockers () { return blockers }
   blocking () { return blocking }
   duplicate () { return #self{ blockers.duplicate(), blocking } }
@@ -93,7 +90,7 @@ define DependencyQueue {
     Priority<#id> priority <- #p.new(graph)
 
     traverse (graph.defaultOrder() -> KeyValue<#id,BidirectionalNode<#id>> idNode) {
-      if (idNode.getValue().blockerCount() == 0) {
+      if (idNode.getValue().blockers().size() == 0) {
         \ idNode.getKey() `pending.setWeight` priority.nodePriority(idNode.getKey())
       }
     }
@@ -185,7 +182,7 @@ define DependencyQueue {
         optional BidirectionalNode<#id> node2 <- graph.get(id2)
       } in if (`present` node2) {
         \ require(node2).removeBlocker(id1)
-        if (require(node2).blockerCount() == 0) {
+        if (require(node2).blockers().size() == 0) {
           $Hidden[id1]$
           \ id2 `pending.setWeight` priority.nodePriority(id2)
         }

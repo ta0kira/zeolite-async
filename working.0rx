@@ -122,8 +122,8 @@ define ByTransitiveCount {
 
   new (blocking) {
     HashedMap<Int,[Container&DefaultOrder<Int>]> allBlocking <- HashedMap<Int,[Container&DefaultOrder<Int>]>.new()
-    traverse (blocking.defaultOrder() -> KeyValue<Int,any> keyValue) {
-      \ collect(keyValue.getKey(),blocking,allBlocking)
+    traverse (blocking.keyOrder() -> Int key) {
+      \ collect(key,blocking,allBlocking)
     }
     HashedMap<Int,Int> priority <- HashedMap<Int,Int>.new()
     traverse (allBlocking.defaultOrder() -> KeyValue<Int,Container> keyValue) {
@@ -167,8 +167,8 @@ define ByBlockingCount {
 
   new (blocking) {
     HashedMap<Int,Int> priority <- HashedMap<Int,Int>.new()
-    traverse (blocking.defaultOrder() -> KeyValue<Int,BlockerNode<Int>> keyValue) {
-      \ keyValue.getKey() `priority.set` keyValue.getValue().blockingCount()+1
+    traverse (blocking.keyOrder() -> Int key) {
+      \ key `priority.set` require(blocking.get(key)).blocking().size()+1
     }
     return #self{ priority }
   }
