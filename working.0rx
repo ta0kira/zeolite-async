@@ -5,9 +5,32 @@ concrete TopoTest {
 define TopoTest {
   run () {
     if (Argv.global().size() < 2 || Argv.global().size() > 3) {
-      fail(Argv.global().readAt(0) + " (\"small\"|[size]) (count)")
+      fail(Argv.global().readAt(0) + " \"async\" | (\"small\"||[size]) (count)")
     }
 
+    if (Argv.global().readAt(1) == "async") {
+      \ runAsyncTest()
+    } else {
+      \ runGraphTest()
+    }
+  }
+
+  @type runAsyncTest () -> ()
+  runAsyncTest () {
+    Float result <- `Compute:now` `AsyncSum.new`
+        Vector<[AsyncValue<AsFloat>&AsyncNode<AsyncId>]>.new()
+            .append(`AsyncFactorial.new` 13)
+            .append(`AsyncFactorial.new` 10)
+            .append(`AsyncFactorial.new` 9)
+            .append(`AsyncFactorial.new` 5)
+    \ BasicOutput.stderr()
+        .write(result)
+        .write("\n")
+        .flush()
+  }
+
+  @type runGraphTest () -> ()
+  runGraphTest () {
     TopoSort<TestNode,Int> topoSort, ReadAt<Int> nodes <- defer
     if (Argv.global().readAt(1) == "small") {
       topoSort, nodes <- constructSmall()

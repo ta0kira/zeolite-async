@@ -1,0 +1,92 @@
+define Compute {
+  now (x) {
+    \ computeRecursive(x)
+    return x.get()
+  }
+
+  @category computeRecursive (AsyncNode<any>) -> ()
+  computeRecursive (x) {
+    traverse (x.getBlockers().defaultOrder() -> AsyncNode<any> blocker) {
+      \ computeRecursive(blocker)
+    }
+    \ x.compute()
+  }
+}
+
+define AsyncId {
+  @category Mutex mutex <- SpinlockMutex.new()
+  @category Int lastId <- 0
+  @value Int id
+
+  new () {
+    scoped {
+      MutexLock lock <- MutexLock.lock(mutex)
+    } cleanup {
+      \ lock.freeResource()
+    } in {
+      return AsyncId{ (lastId <- lastId+1) }
+    }
+  }
+
+  equals (x,y) { return x.id() == y.id() }
+  lessThan (x,y) { return x.id() < y.id() }
+  formatted () { return String.builder().append("AsyncId{").append(id).append("}").build() }
+  hashed () { return id.hashed() }
+
+  @value id () -> (Int)
+  id () { return id }
+}
+
+define AsyncSum {
+  $ReadOnly[id,deps]$
+
+  @value AsyncId id
+  @value optional Float result
+  @value DefaultOrder<[AsyncValue<AsFloat>&AsyncNode<AsyncId>]> deps
+
+  new (deps) {
+    return #self{ AsyncId.new(), empty, deps.defaultOrder() `OrderH:copyTo` Vector<[AsyncValue<AsFloat>&AsyncNode<AsyncId>]>.new() }
+  }
+
+  get () { return `require` result }
+  getId () { return id }
+  getBlockers () { return deps }
+
+  compute () {
+    if (! `present` result) {
+      Float result2 <- 0.0
+      traverse (deps.defaultOrder() -> AsyncValue<AsFloat> dep) {
+        $Hidden[result]$
+        result2 <- result2+dep.get().asFloat()
+      }
+      result <- result2
+    }
+  }
+}
+
+define AsyncFactorial {
+  $ReadOnly[id,limit]$
+
+  @value AsyncId id
+  @value optional Int result
+  @value Int limit
+
+  new (limit) {
+    return #self{ AsyncId.new(), empty, limit }
+  }
+
+  get () { return `require` result }
+  getId () { return id }
+  getBlockers () { return Vector<all>.new() }
+
+  compute () {
+    if (! `present` result) {
+      Int result2 <- 1
+      traverse (`Counter.zeroIndexed` limit -> Int minus1) {
+        $Hidden[result]$
+        result2 <- result2*(minus1+1)
+      }
+      result <- result2
+    }
+  }
+}

@@ -1,0 +1,39 @@
+$ModuleOnly$
+
+@value interface AsyncNode<|#id> {
+  getId () -> (#id)
+  getBlockers () -> (DefaultOrder<AsyncNode<#id>>)
+  compute () -> ()
+}
+
+@value interface AsyncValue<|#x> {
+  get () -> (#x)
+}
+
+concrete Compute {
+  @category now<#x> ([AsyncValue<#x>&AsyncNode<any>]) -> (#x)
+}
+
+concrete AsyncId {
+  immutable
+  defines Equals<AsyncId>
+  defines LessThan<AsyncId>
+  refines Formatted
+  refines Hashed
+
+  @type new () -> (AsyncId)
+}
+
+concrete AsyncSum {
+  refines AsyncNode<AsyncId>
+  refines AsyncValue<Float>
+
+  @type new (DefaultOrder<[AsyncValue<AsFloat>&AsyncNode<AsyncId>]>) -> (#self)
+}
+
+concrete AsyncFactorial {
+  refines AsyncNode<AsyncId>
+  refines AsyncValue<Int>
+
+  @type new (Int) -> (#self)
+}
