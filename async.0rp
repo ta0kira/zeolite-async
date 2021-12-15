@@ -3,15 +3,25 @@ $ModuleOnly$
 @value interface AsyncNode<|#id> {
   getId () -> (#id)
   getBlockers () -> (DefaultOrder<AsyncNode<#id>>)
-  compute () -> ()
+  start () -> (#self)
+  finish () -> (#self)
+  tryFinish () -> (Bool)
 }
 
 @value interface AsyncValue<|#x> {
   get () -> (#x)
 }
 
-concrete Compute {
-  @category now<#x> ([AsyncValue<#x>&AsyncNode<any>]) -> (#x)
+concrete Compute<#id,#x> {
+  #id immutable
+  #id defines Equals<#id>
+  #id requires Hashed
+
+  @category now<#id,#x>
+    #id immutable
+    #id defines Equals<#id>
+    #id requires Hashed
+  ([AsyncValue<#x>&AsyncNode<#id>]) -> (#x)
 }
 
 concrete AsyncId {

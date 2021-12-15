@@ -1,15 +1,162 @@
+concrete Queue<#x> {
+  @type new () -> (#self)
+  @value push (#x) -> (#self)
+  @value pop () -> (#x)
+  @value isEmpty () -> (Bool)
+}
+
+define Queue {
+  @value optional ForwardNode<#x> head
+  @value optional ForwardNode<#x> tail
+
+  new () {
+    return #self{ empty, empty }
+  }
+
+  push (x) {
+    scoped {
+      ForwardNode<#x> node <- ForwardNode<#x>.newNode(x)
+    } in if (`present` tail) {
+      \ require(tail).setNext(node)
+      tail <- node
+    } else {
+      head <- (tail <- node)
+    }
+    return self
+  }
+
+  pop () {
+    cleanup {
+      head <- require(head).next()
+      if (! `present` head) {
+        tail <- empty
+      }
+    } in return require(head).get()
+  }
+
+  isEmpty () {
+    return ! `present` head
+  }
+}
+
 define Compute {
+  $ReadOnly[idToNode,depends,blocking,execQueue]$
+
+  @value HashedMap<#id,AsyncNode<#id>> idToNode
+  @value HashedMap<#id,HashedSet<#id>> depends
+  @value HashedMap<#id,HashedSet<#id>> blocking
+  @value Queue<AsyncNode<#id>> execQueue
+  // NOTE: waitQueue needs to be overwritten in runWait().
+  @value Queue<AsyncNode<#id>> waitQueue
+
   now (x) {
-    \ computeRecursive(x)
+    Compute<#id,#x> compute <- Compute<#id,#x>{
+        HashedMap<#id,AsyncNode<#id>>.new(),
+        HashedMap<#id,HashedSet<#id>>.new(),
+        HashedMap<#id,HashedSet<#id>>.new(),
+        Queue<AsyncNode<#id>>.new(),
+        Queue<AsyncNode<#id>>.new() }
+    \ compute.setBlockers(x)
+    \ compute.run()
     return x.get()
   }
 
-  @category computeRecursive (AsyncNode<any>) -> ()
-  computeRecursive (x) {
-    traverse (x.getBlockers().defaultOrder() -> AsyncNode<any> blocker) {
-      \ computeRecursive(blocker)
+  @value run () -> ()
+  run () {
+    \ initQueue()
+    while (!execQueue.isEmpty() || !waitQueue.isEmpty()) {
+      \ runExec()
+      \ runWait()
     }
-    \ x.compute()
+  }
+
+  @value runExec () -> ()
+  runExec () {
+    while (!execQueue.isEmpty()) {
+      AsyncNode<#id> node <- execQueue.pop()
+      \ node.start()
+      if (node.tryFinish()) {
+        \ completeId(node.getId())
+      } else {
+        \ waitQueue.push(node)
+      }
+    }
+  }
+
+  @value runWait () -> ()
+  runWait () {
+    $Hidden[execQueue]$
+    // 1. Attempt to finish all nodes in the wait queue without blocking.
+    // 2. If any of them result in another node being unblocked, return control.
+    // 3. Otherwise, do a blocking wait and return as soon as any other nodes
+    //    are unblocked.
+    Bool unblocked <- false
+    Queue<AsyncNode<#id>> waitQueue2 <- Queue<AsyncNode<#id>>.new()
+    while (!waitQueue.isEmpty()) {
+      AsyncNode<#id> node <- waitQueue.pop()
+      if (!node.tryFinish()) {
+        \ waitQueue2.push(node)
+      } else {
+        unblocked <- unblocked || completeId(node.getId())
+      }
+    }
+    waitQueue <- waitQueue2
+    $Hidden[waitQueue2]$
+    if (!unblocked) {
+      while (!waitQueue.isEmpty()) {
+        AsyncNode<#id> node <- waitQueue.pop().finish()
+        if (completeId(node.getId())) {
+          break
+        }
+      }
+    }
+  }
+
+  @value completeId (#id) -> (Bool)
+  completeId (id) (unblocked) {
+    unblocked <- false
+    scoped {
+      HashedSet<#id> wasBlocking <- `require` (id `blocking.swap` empty)
+    } in traverse (wasBlocking.defaultOrder() -> #id node) {
+      scoped {
+        HashedSet<#id> remaining <- require(depends.get(node)).remove(id)
+      } in if (remaining.size() == 0) {
+        unblocked <- true
+        \ depends.remove(node)
+        \ execQueue.push(`require` `idToNode.get` node)
+      }
+    }
+  }
+
+  @value initQueue () -> ()
+  initQueue () {
+    traverse (depends.defaultOrder() -> KeyValue<#id,Container> keyValue) {
+      if (keyValue.getValue().size() == 0) {
+        \ execQueue.push(`require` `idToNode.get` keyValue.getKey())
+      }
+    }
+  }
+
+  @value setBlockers (AsyncNode<#id>) -> ()
+  setBlockers (node) {
+    scoped {
+      optional HashedSet<#id> existing <- `depends.get` node.getId()
+    } in if (! `present` existing) {
+      #id id <- node.getId()
+      \ id `idToNode.set` node
+      HashedSet<#id> newBlockers <- defer
+      \ id `depends.set` (newBlockers <- HashedSet<#id>.new())
+      // This is used by the parent call.
+      \ id `blocking.set` HashedSet<#id>.new()
+      traverse (node.getBlockers().defaultOrder() -> AsyncNode<#id> blocker) {
+        #id id2 <- blocker.getId()
+        \ newBlockers.add(id2)
+        \ setBlockers(blocker)
+        // NOTE: The recursive call must come before this so that there's a
+        // blocking entry for id2.
+        \ require(blocking.get(id2)).add(id)
+      }
+    }
   }
 }
 
@@ -52,7 +199,7 @@ define AsyncSum {
   getId () { return id }
   getBlockers () { return deps }
 
-  compute () {
+  start () {
     if (! `present` result) {
       Float result2 <- 0.0
       traverse (deps.defaultOrder() -> AsyncValue<AsFloat> dep) {
@@ -61,6 +208,15 @@ define AsyncSum {
       }
       result <- result2
     }
+    return self
+  }
+
+  finish () {
+    return self
+  }
+
+  tryFinish () {
+    return `present` result
   }
 }
 
@@ -79,7 +235,7 @@ define AsyncFactorial {
   getId () { return id }
   getBlockers () { return Vector<all>.new() }
 
-  compute () {
+  start () {
     if (! `present` result) {
       Int result2 <- 1
       traverse (`Counter.zeroIndexed` limit -> Int minus1) {
@@ -88,5 +244,14 @@ define AsyncFactorial {
       }
       result <- result2
     }
+    return self
+  }
+
+  finish () {
+    return self
+  }
+
+  tryFinish () {
+    return `present` result
   }
 }
