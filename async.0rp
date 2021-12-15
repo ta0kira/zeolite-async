@@ -47,3 +47,14 @@ concrete AsyncFactorial {
 
   @type new (Int) -> (#self)
 }
+
+concrete AsyncExec {
+  refines AsyncNode<AsyncId>
+  // Returns exit status or error message.
+  refines AsyncValue<ErrorOr<Int>>
+
+  // Args:
+  // - String: Command name.
+  // - optional ReadAt<Formatted>: Args not including the command name.
+  @type withArgs (String,optional ReadAt<Formatted>) -> (#self)
+}

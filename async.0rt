@@ -1,0 +1,78 @@
+testcase "AsyncExec tests" {
+  success
+  timeout 5
+}
+
+unittest success {
+  AsyncExec command <- "/bin/true" `AsyncExec.withArgs` empty
+  \ command.start().finish()
+  \ UtilTesting.checkSuccess(command.get(),0)
+}
+
+unittest blockers {
+  AsyncExec command <- "/bin/true" `AsyncExec.withArgs` empty
+  traverse (command.getBlockers().defaultOrder() -> AsyncNode<AsyncId> blocker) {
+    fail(blocker.getId())
+  }
+}
+
+unittest tryFinish {
+  AsyncExec command <- "/bin/sleep" `AsyncExec.withArgs` Vector<Float>.new().append(0.5)
+  \ command.start()
+  Bool pending <- false
+  while (!command.tryFinish()) {
+    pending <- true
+  }
+  \ UtilTesting.checkSuccess(command.get(),0)
+}
+
+unittest idempotent {
+  AsyncExec command <- "/bin/true" `AsyncExec.withArgs` empty
+  \ command.start().start().finish().finish()
+  \ UtilTesting.checkSuccess(command.get(),0)
+}
+
+unittest failure {
+  AsyncExec command <- "/bin/false" `AsyncExec.withArgs` empty
+  \ command.start().finish()
+  \ UtilTesting.checkSuccessBetween(command.get(),0,256)
+}
+
+unittest badBinary {
+  AsyncExec command <- "/path/to/bad" `AsyncExec.withArgs` empty
+  \ command.start().finish()
+  \ UtilTesting.checkSuccessBetween(command.get(),0,256)
+}
+
+
+testcase "AsyncExec finish without start" {
+  crash
+  require "started"
+}
+
+unittest test {
+  AsyncExec command <- "/bin/true" `AsyncExec.withArgs` empty
+  \ command.finish()
+}
+
+
+testcase "AsyncExec get without start" {
+  crash
+  require "started"
+}
+
+unittest test {
+  AsyncExec command <- "/bin/true" `AsyncExec.withArgs` empty
+  \ command.get()
+}
+
+
+testcase "AsyncExec get without finish" {
+  crash
+  require "completed"
+}
+
+unittest test {
+  AsyncExec command <- "/bin/true" `AsyncExec.withArgs` empty
+  \ command.start().get()
+}
