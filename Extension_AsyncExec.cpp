@@ -8,6 +8,7 @@
 #include "category-source.hpp"
 #include "Streamlined_AsyncExec.hpp"
 #include "Category_AlwaysEmpty.hpp"
+#include "Category_AsyncCollector.hpp"
 #include "Category_AsyncExec.hpp"
 #include "Category_AsyncId.hpp"
 #include "Category_AsyncNode.hpp"
@@ -54,6 +55,14 @@ struct ExtValue_AsyncExec : public Value_AsyncExec {
       id_(TypeInstance::Call(GetType_AsyncId(Params<0>::Type()), Function_AsyncId_new, PassParamsArgs()).At(0)),
       command_(std::move(command)) {}
 
+  ReturnTuple Call_collect(const ParamsArgs& params_args) final {
+    TRACE_FUNCTION("AsyncExec.collect")
+    const BoxedValue& collector = params_args.GetArg(0);
+    const BoxedValue empty = TypeInstance::Call(GetType_AlwaysEmpty(Params<0>::Type()), Function_Default_default, PassParamsArgs()).At(0);
+    (void) TypeValue::Call(collector, Function_AsyncCollector_include, PassParamsArgs(VAR_SELF, empty));
+    return ReturnTuple();
+  }
+
   ReturnTuple Call_finish(const ParamsArgs& params_args) final {
     TRACE_FUNCTION("AsyncExec.finish")
     Finish(true);
@@ -77,11 +86,6 @@ struct ExtValue_AsyncExec : public Value_AsyncExec {
       return ReturnTuple(GetCategory_ErrorOr().Call(
         Function_ErrorOr_value, PassParamsArgs(GetType_Int(Params<0>::Type()), Box_Int(status_))));
     }
-  }
-
-  ReturnTuple Call_getBlockers(const ParamsArgs& params_args) final {
-    TRACE_FUNCTION("AsyncExec.getBlockers")
-    return ReturnTuple(TypeInstance::Call(GetType_AlwaysEmpty(Params<0>::Type()), Function_Default_default, PassParamsArgs()));
   }
 
   ReturnTuple Call_getId(const ParamsArgs& params_args) final {

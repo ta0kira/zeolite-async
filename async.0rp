@@ -1,11 +1,20 @@
 $ModuleOnly$
 
 @value interface AsyncNode<|#id> {
+  collect (AsyncCollector<#id>) -> ()
+}
+
+@value interface AsyncRun<|#id> {
+  refines AsyncNode<#id>
+
   getId () -> (#id)
-  getBlockers () -> (DefaultOrder<AsyncNode<#id>>)
   start () -> (#self)
   finish () -> (#self)
   tryFinish () -> (Bool)
+}
+
+@value interface AsyncCollector<#id|> {
+  include (AsyncRun<#id>,DefaultOrder<AsyncNode<#id>>) -> (#self)
 }
 
 @value interface AsyncValue<|#x> {
@@ -49,7 +58,7 @@ concrete AsyncFactorial {
 }
 
 concrete AsyncExec {
-  refines AsyncNode<AsyncId>
+  refines AsyncRun<AsyncId>
   // Returns exit status or error message.
   refines AsyncValue<ErrorOr<Int>>
 

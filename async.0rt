@@ -9,11 +9,13 @@ unittest success {
   \ UtilTesting.checkSuccess(command.get(),0)
 }
 
-unittest blockers {
+unittest collect {
   AsyncExec command <- "/bin/true" `AsyncExec.withArgs` empty
-  traverse (command.getBlockers().defaultOrder() -> AsyncNode<AsyncId> blocker) {
-    fail(blocker.getId())
-  }
+  TestCollector collector <- TestCollector.new()
+  \ command.collect(collector)
+  [Container&SetReader<AsyncId>] results <- collector.results()
+  \ Testing.checkEquals(results.size(),1)
+  \ Testing.checkTrue(results.member(command.getId()))
 }
 
 unittest tryFinish {
@@ -42,6 +44,30 @@ unittest badBinary {
   AsyncExec command <- "/path/to/bad" `AsyncExec.withArgs` empty
   \ command.start().finish()
   \ UtilTesting.checkSuccessBetween(command.get(),0,256)
+}
+
+concrete TestCollector {
+  refines AsyncCollector<AsyncId>
+
+  @type new () -> (TestCollector)
+  @value results () -> ([Container&SetReader<AsyncId>])
+}
+
+define TestCollector {
+  @value HashedSet<AsyncId> added
+
+  new () {
+    return TestCollector{ HashedSet<AsyncId>.new() }
+  }
+
+  include (node,_) {
+    \ added.add(node.getId())
+    return self
+  }
+
+  results () {
+    return added
+  }
 }
 
 
