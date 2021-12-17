@@ -1,22 +1,20 @@
 root: ".."
-path: "topo-sort"
+path: "async"
 extra_paths: [
-  "topo-sort/src"
-  "topo-sort/test"
-  "topo-sort/working"
+  "async/src"
+  "async/test"
 ]
 public_deps: [
   "lib/util"
 ]
 private_deps: [
   "lib/container"
-  "lib/math"
   "lib/thread"
   "lib/testing"
 ]
 extra_files: [
   category_source {
-    source: "topo-sort/src/Extension_AsyncExec.cpp"
+    source: "async/src/Extension_AsyncExec.cpp"
     categories: [AsyncExec]
     requires: [AlwaysEmpty]
   }
@@ -27,7 +25,4 @@ extension_specs: [
     refines: [AsyncRun<#id>]
   }
 ]
-mode: binary {
-  category: TopoTest
-  function: run
-}
+mode: incremental {}

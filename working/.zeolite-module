@@ -1,0 +1,12 @@
+root: ".."
+path: "working"
+private_deps: [
+  "../async"
+  "lib/container"
+  "lib/math"
+  "lib/thread"
+]
+mode: binary {
+  category: TopoTest
+  function: run
+}
