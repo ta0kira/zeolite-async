@@ -38,12 +38,10 @@ struct ExtType_AsyncExec : public Type_AsyncExec {
     std::vector<PrimString> command;
     command.push_back(params_args.GetArg(0).AsString());
     const BoxedValue& args = params_args.GetArg(1);
-    if (BoxedValue::Present(args)) {
-      const PrimInt count = TypeValue::Call(args, Function_Container_size, PassParamsArgs()).At(0).AsInt();
-      for (int i = 0; i < count; ++i) {
-        const BoxedValue arg = TypeValue::Call(args, Function_ReadAt_readAt, PassParamsArgs(Box_Int(i))).At(0);
-        command.push_back(TypeValue::Call(arg, Function_Formatted_formatted, PassParamsArgs()).At(0).AsString());
-      }
+    const PrimInt count = TypeValue::Call(args, Function_Container_size, PassParamsArgs()).At(0).AsInt();
+    for (int i = 0; i < count; ++i) {
+      const BoxedValue arg = TypeValue::Call(args, Function_ReadAt_readAt, PassParamsArgs(Box_Int(i))).At(0);
+      command.push_back(TypeValue::Call(arg, Function_Formatted_formatted, PassParamsArgs()).At(0).AsString());
     }
     return ReturnTuple(CreateValue_AsyncExec(PARAM_SELF, std::move(command)));
   }

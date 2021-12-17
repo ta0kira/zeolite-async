@@ -4,7 +4,7 @@ testcase "AsyncExec tests" {
 }
 
 unittest success {
-  AsyncExec command <- "/bin/true" `AsyncExec.withArgs` empty
+  AsyncExec command <- "/bin/true" `AsyncExec.withArgs` AlwaysEmpty.default()
   scoped {
     CollectSingle<AsyncId> collector <- CollectSingle<AsyncId>.new()
     \ command.collect(collector)
@@ -26,7 +26,7 @@ unittest runOnce {
 }
 
 unittest blockingNodes {
-  AsyncExec command <- "/bin/true" `AsyncExec.withArgs` empty
+  AsyncExec command <- "/bin/true" `AsyncExec.withArgs` AlwaysEmpty.default()
   scoped {
     CollectSingle<AsyncId> collector <- CollectSingle<AsyncId>.new()
     \ command.collect(collector)
@@ -51,7 +51,7 @@ unittest tryFinish {
 }
 
 unittest idempotent {
-  AsyncExec command <- "/bin/true" `AsyncExec.withArgs` empty
+  AsyncExec command <- "/bin/true" `AsyncExec.withArgs` AlwaysEmpty.default()
   scoped {
     CollectSingle<AsyncId> collector <- CollectSingle<AsyncId>.new()
     \ command.collect(collector)
@@ -61,7 +61,7 @@ unittest idempotent {
 }
 
 unittest failure {
-  AsyncExec command <- "/bin/false" `AsyncExec.withArgs` empty
+  AsyncExec command <- "/bin/false" `AsyncExec.withArgs` AlwaysEmpty.default()
   scoped {
     CollectSingle<AsyncId> collector <- CollectSingle<AsyncId>.new()
     \ command.collect(collector)
@@ -71,7 +71,7 @@ unittest failure {
 }
 
 unittest badBinary {
-  AsyncExec command <- "/path/to/bad" `AsyncExec.withArgs` empty
+  AsyncExec command <- "/path/to/bad" `AsyncExec.withArgs` AlwaysEmpty.default()
   scoped {
     CollectSingle<AsyncId> collector <- CollectSingle<AsyncId>.new()
     \ command.collect(collector)
@@ -87,7 +87,7 @@ testcase "AsyncExec finish without start" {
 }
 
 unittest test {
-  AsyncExec command <- "/bin/true" `AsyncExec.withArgs` empty
+  AsyncExec command <- "/bin/true" `AsyncExec.withArgs` AlwaysEmpty.default()
   scoped {
     CollectSingle<AsyncId> collector <- CollectSingle<AsyncId>.new()
     \ command.collect(collector)
@@ -102,7 +102,7 @@ testcase "AsyncExec get without start" {
 }
 
 unittest test {
-  AsyncExec command <- "/bin/true" `AsyncExec.withArgs` empty
+  AsyncExec command <- "/bin/true" `AsyncExec.withArgs` AlwaysEmpty.default()
   scoped {
     CollectSingle<AsyncId> collector <- CollectSingle<AsyncId>.new()
     \ command.collect(collector)
@@ -117,7 +117,7 @@ testcase "AsyncExec get without finish" {
 }
 
 unittest test {
-  AsyncExec command <- "/bin/true" `AsyncExec.withArgs` empty
+  AsyncExec command <- "/bin/true" `AsyncExec.withArgs` AlwaysEmpty.default()
   scoped {
     CollectSingle<AsyncId> collector <- CollectSingle<AsyncId>.new()
     \ command.collect(collector)

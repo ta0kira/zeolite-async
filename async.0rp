@@ -65,7 +65,7 @@ concrete AsyncExec {
   // Args:
   // - String: Command name.
   // - optional ReadAt<Formatted>: Args not including the command name.
-  @type withArgs (String,optional ReadAt<Formatted>) -> (#self)
+  @type withArgs (String,ReadAt<Formatted>) -> (#self)
 
   @value runOnce () -> (ErrorOr<Int>)
 }
