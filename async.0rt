@@ -13,6 +13,18 @@ unittest success {
   \ UtilTesting.checkSuccess(command.get(),0)
 }
 
+unittest runOnce {
+  AsyncExec command <- "/bin/sleep" `AsyncExec.withArgs` Vector<Int>.new().append(1)
+  // Make sure the count here is > the testcase timeout.
+  \ UtilTesting.checkSuccess(command.runOnce(),0)
+  \ UtilTesting.checkSuccess(command.runOnce(),0)
+  \ UtilTesting.checkSuccess(command.runOnce(),0)
+  \ UtilTesting.checkSuccess(command.runOnce(),0)
+  \ UtilTesting.checkSuccess(command.runOnce(),0)
+  \ UtilTesting.checkSuccess(command.runOnce(),0)
+  \ UtilTesting.checkSuccess(command.get(),0)
+}
+
 unittest blockingNodes {
   AsyncExec command <- "/bin/true" `AsyncExec.withArgs` empty
   scoped {

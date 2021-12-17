@@ -121,6 +121,13 @@ struct ExtValue_AsyncExec : public Value_AsyncExec {
     return ReturnTuple(Box_Bool(Finish(false)));
   }
 
+  ReturnTuple Call_runOnce(const ParamsArgs& params_args) final {
+    TRACE_FUNCTION("AsyncExec.runOnce")
+    Call_start(PassParamsArgs());
+    Call_finish(PassParamsArgs());
+    return ReturnTuple(Call_get(PassParamsArgs()));
+  }
+
   bool Finish(bool block) {
     if (!executed_) {
       FAIL() << "Process was never started";
