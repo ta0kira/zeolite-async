@@ -1,0 +1,72 @@
+define ChainExec {
+  refines AsyncRun<AsyncId>
+  refines AsyncCollector<AsyncId>
+
+  @value optional ErrorOr<Int> result
+  @value AsyncId id
+  @value [AsyncValue<ErrorOr<Int>>&AsyncNode<AsyncId>] exec
+  @value Vector<AsyncRun<AsyncId>> run
+  @value Vector<AsyncValue<ErrorOr<Int>>> deps
+  @value Vector<AsyncNode<AsyncId>> blocking
+
+  runAfter (exec,nodes) {
+    Vector<AsyncValue<ErrorOr<Int>>> deps     <- nodes.defaultOrder() `OrderH:copyTo<AsyncValue<ErrorOr<Int>>,?>` Vector<AsyncValue<ErrorOr<Int>>>.new()
+    Vector<AsyncNode<AsyncId>>       blocking <- nodes.defaultOrder() `OrderH:copyTo<AsyncNode<AsyncId>,?>`       Vector<AsyncNode<AsyncId>>.new()
+    ChainExec chained <- ChainExec{ empty, AsyncId.new(), exec, Vector<AsyncRun<AsyncId>>.new(), deps, blocking }
+    \ exec.collect(chained)
+    return chained
+  }
+
+  include (node,blocking2) {
+    \ run.append(node)
+    \ blocking2.defaultOrder() `OrderH:copyTo` blocking
+    return self
+  }
+
+  getId () {
+    return id
+  }
+
+  start () {
+    traverse (run.defaultOrder() -> AsyncRun<AsyncId> process) {
+      \ process.start()
+    }
+    return self
+  }
+
+  finish () {
+    traverse (run.defaultOrder() -> AsyncRun<AsyncId> process) {
+      \ process.finish()
+    }
+    return self
+  }
+
+  tryFinish () (complete) {
+    complete <- true
+    traverse (run.defaultOrder() -> AsyncRun<AsyncId> process) {
+      // Order matters here, due to short-circuiting.
+      complete <- process.tryFinish() && complete
+    }
+  }
+
+  collect (collector) {
+    \ self `collector.include` blocking
+  }
+
+  get () {
+    if (!`present` result) {
+      traverse (deps.defaultOrder() -> AsyncValue<ErrorOr<Int>> dep) {
+        scoped {
+          ErrorOr<Int> status <- dep.get()
+        } in if (status.isError() || status.getValue() != 0) {
+          result <- status
+          break
+        }
+      }
+    }
+    if (! `present` result) {
+      result <- exec.get()
+    }
+    return `require` result
+  }
+}

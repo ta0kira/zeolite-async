@@ -1,12 +1,21 @@
-concrete AsyncExec {
-  refines AsyncNode<AsyncId>
+@value interface ExecCommand<|#id> {
+  refines AsyncNode<#id>
   // Returns exit status or error message.
   refines AsyncValue<ErrorOr<Int>>
+}
+
+concrete AsyncExec {
+  refines ExecCommand<AsyncId>
 
   // Args:
   // - String: Command name.
   // - optional ReadAt<Formatted>: Args not including the command name.
   @type withArgs (String,ReadAt<Formatted>) -> (#self)
-
   @value runOnce () -> (ErrorOr<Int>)
+}
+
+concrete ChainExec {
+  refines ExecCommand<AsyncId>
+
+  @type runAfter (ExecCommand<AsyncId>,DefaultOrder<ExecCommand<AsyncId>>) -> (#self)
 }

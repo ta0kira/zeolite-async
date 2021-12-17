@@ -17,14 +17,24 @@ define TopoTest {
 
   @type runAsyncTest () -> ()
   runAsyncTest () {
-    Float result <- AsyncSum.new(
-        Vector<[AsyncValue<AsFloat>&AsyncNode<AsyncId>]>.new()
-            .append(`AsyncFactorial.new` 13)
-            .append(`AsyncFactorial.new` 10)
-            .append(`AsyncFactorial.new` 9)
-            .append(`AsyncFactorial.new` 5)) `Compute:with` InlineRunner<AsyncId>.new()
+    ExecCommand<AsyncId> exec1 <- "/bin/echo" `AsyncExec.withArgs` Vector<Formatted>.new().append("exec1")
+    ExecCommand<AsyncId> exec2 <- "/bin/echo" `AsyncExec.withArgs` Vector<Formatted>.new().append("exec2")
+    ExecCommand<AsyncId> exec3 <- "/bin/echo" `AsyncExec.withArgs` Vector<Formatted>.new().append("exec3")
+    ExecCommand<AsyncId> exec4 <- "/bin/echo" `AsyncExec.withArgs` Vector<Formatted>.new().append("exec4")
+    ExecCommand<AsyncId> exec5 <- "/bin/echo" `AsyncExec.withArgs` Vector<Formatted>.new().append("exec5")
+
+    ExecCommand<AsyncId> graph <-
+      exec1 `ChainExec.runAfter` Vector<ExecCommand<AsyncId>>.new()
+          .append(exec2 `ChainExec.runAfter` Vector<ExecCommand<AsyncId>>.new()
+              .append(exec4))
+          .append(exec3 `ChainExec.runAfter` Vector<ExecCommand<AsyncId>>.new()
+              .append(exec4)
+              .append(exec5))
+
+    ErrorOr<Int> status <- graph `Compute:with` InlineRunner<AsyncId>.new()
+
     \ BasicOutput.stderr()
-        .write(result)
+        .write(status.getValue())
         .write("\n")
         .flush()
   }
