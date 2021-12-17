@@ -1,18 +1,20 @@
 define ChainExec {
-  refines AsyncRun<AsyncId>
-  refines AsyncCollector<AsyncId>
+  $ReadOnly[id,exec,run,deps,blocking]$
+
+  refines AsyncRun<#id>
+  refines AsyncCollector<#id>
 
   @value optional ErrorOr<Int> result
-  @value AsyncId id
-  @value [AsyncValue<ErrorOr<Int>>&AsyncNode<AsyncId>] exec
-  @value Vector<AsyncRun<AsyncId>> run
+  @value #id id
+  @value [AsyncValue<ErrorOr<Int>>&AsyncNode<#id>] exec
+  @value Vector<AsyncRun<#id>> run
   @value Vector<AsyncValue<ErrorOr<Int>>> deps
-  @value Vector<AsyncNode<AsyncId>> blocking
+  @value Vector<AsyncNode<#id>> blocking
 
   runAfter (exec,nodes) {
-    Vector<AsyncValue<ErrorOr<Int>>> deps     <- nodes.defaultOrder() `OrderH:copyTo<AsyncValue<ErrorOr<Int>>,?>` Vector<AsyncValue<ErrorOr<Int>>>.new()
-    Vector<AsyncNode<AsyncId>>       blocking <- nodes.defaultOrder() `OrderH:copyTo<AsyncNode<AsyncId>,?>`       Vector<AsyncNode<AsyncId>>.new()
-    ChainExec chained <- ChainExec{ empty, AsyncId.new(), exec, Vector<AsyncRun<AsyncId>>.new(), deps, blocking }
+    Vector<AsyncValue<ErrorOr<Int>>> deps <- nodes.defaultOrder() `OrderH:copyTo<AsyncValue<ErrorOr<Int>>,?>` Vector<AsyncValue<ErrorOr<Int>>>.new()
+    Vector<AsyncNode<#id>>       blocking <- nodes.defaultOrder() `OrderH:copyTo<AsyncNode<#id>,?>`           Vector<AsyncNode<#id>>.new()
+    ChainExec<#id> chained <- ChainExec<#id>{ empty, #id.uniqueId(), exec, Vector<AsyncRun<#id>>.new(), deps, blocking }
     \ exec.collect(chained)
     return chained
   }
@@ -28,14 +30,14 @@ define ChainExec {
   }
 
   start () {
-    traverse (run.defaultOrder() -> AsyncRun<AsyncId> process) {
+    traverse (run.defaultOrder() -> AsyncRun<#id> process) {
       \ process.start()
     }
     return self
   }
 
   finish () {
-    traverse (run.defaultOrder() -> AsyncRun<AsyncId> process) {
+    traverse (run.defaultOrder() -> AsyncRun<#id> process) {
       \ process.finish()
     }
     return self
@@ -43,7 +45,7 @@ define ChainExec {
 
   tryFinish () (complete) {
     complete <- true
-    traverse (run.defaultOrder() -> AsyncRun<AsyncId> process) {
+    traverse (run.defaultOrder() -> AsyncRun<#id> process) {
       // Order matters here, due to short-circuiting.
       complete <- process.tryFinish() && complete
     }

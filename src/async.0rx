@@ -13,6 +13,10 @@ define AsyncId {
     }
   }
 
+  uniqueId () {
+    return new()
+  }
+
   equals (x,y) { return x.id() == y.id() }
   lessThan (x,y) { return x.id() < y.id() }
   formatted () { return String.builder().append("AsyncId{").append(id).append("}").build() }

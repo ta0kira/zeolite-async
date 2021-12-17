@@ -4,18 +4,23 @@
   refines AsyncValue<ErrorOr<Int>>
 }
 
-concrete AsyncExec {
-  refines ExecCommand<AsyncId>
+concrete AsyncExec<#id> {
+  refines ExecCommand<#id>
 
   // Args:
   // - String: Command name.
   // - optional ReadAt<Formatted>: Args not including the command name.
-  @type withArgs (String,ReadAt<Formatted>) -> (#self)
+  @category withArgs<#id>
+    #id defines UniqueId
+  (String,ReadAt<Formatted>) -> (AsyncExec<#id>)
+
   @value runOnce () -> (ErrorOr<Int>)
 }
 
-concrete ChainExec {
-  refines ExecCommand<AsyncId>
+concrete ChainExec<#id> {
+  refines ExecCommand<#id>
 
-  @type runAfter (ExecCommand<AsyncId>,DefaultOrder<ExecCommand<AsyncId>>) -> (#self)
+  @category runAfter<#id>
+    #id defines UniqueId
+  (ExecCommand<#id>,DefaultOrder<ExecCommand<#id>>) -> (ChainExec<#id>)
 }

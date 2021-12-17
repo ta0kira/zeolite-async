@@ -24,7 +24,7 @@ extra_files: [
 extension_specs: [
   category {
     name: AsyncExec
-    refines: [AsyncRun<AsyncId>]
+    refines: [AsyncRun<#id>]
   }
 ]
 mode: binary {

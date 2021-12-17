@@ -10,7 +10,6 @@
 #include "Category_AlwaysEmpty.hpp"
 #include "Category_AsyncCollector.hpp"
 #include "Category_AsyncExec.hpp"
-#include "Category_AsyncId.hpp"
 #include "Category_AsyncNode.hpp"
 #include "Category_AsyncValue.hpp"
 #include "Category_Bool.hpp"
@@ -20,37 +19,39 @@
 #include "Category_Formatted.hpp"
 #include "Category_Int.hpp"
 #include "Category_ReadAt.hpp"
+#include "Category_UniqueId.hpp"
 
 #ifdef ZEOLITE_PUBLIC_NAMESPACE
 namespace ZEOLITE_PUBLIC_NAMESPACE {
 #endif  // ZEOLITE_PUBLIC_NAMESPACE
 
-BoxedValue CreateValue_AsyncExec(S<const Type_AsyncExec> parent, std::vector<PrimString> command);
+BoxedValue CreateValue_AsyncExec(S<const Type_AsyncExec> parent, BoxedValue id, std::vector<PrimString> command);
 
 struct ExtCategory_AsyncExec : public Category_AsyncExec {
-};
-
-struct ExtType_AsyncExec : public Type_AsyncExec {
-  inline ExtType_AsyncExec(Category_AsyncExec& p, Params<0>::Type params) : Type_AsyncExec(p, params) {}
-
-  ReturnTuple Call_withArgs(const ParamsArgs& params_args) const final {
-    TRACE_FUNCTION("AsyncExec.withArgs")
+  ReturnTuple Call_withArgs(const ParamsArgs& params_args) final {
+    TRACE_FUNCTION("AsyncExec:withArgs")
     std::vector<PrimString> command;
     command.push_back(params_args.GetArg(0).AsString());
     const BoxedValue& args = params_args.GetArg(1);
+    const S<const TypeInstance> &Param_id = params_args.GetParam(0);
     const PrimInt count = TypeValue::Call(args, Function_Container_size, PassParamsArgs()).At(0).AsInt();
     for (int i = 0; i < count; ++i) {
       const BoxedValue arg = TypeValue::Call(args, Function_ReadAt_readAt, PassParamsArgs(Box_Int(i))).At(0);
       command.push_back(TypeValue::Call(arg, Function_Formatted_formatted, PassParamsArgs()).At(0).AsString());
     }
-    return ReturnTuple(CreateValue_AsyncExec(PARAM_SELF, std::move(command)));
+    const BoxedValue id = TypeInstance::Call(Param_id, Function_UniqueId_uniqueId, PassParamsArgs()).At(0);
+    return ReturnTuple(CreateValue_AsyncExec(CreateType_AsyncExec(Params<1>::Type(Param_id)), std::move(id), std::move(command)));
   }
 };
 
+struct ExtType_AsyncExec : public Type_AsyncExec {
+  inline ExtType_AsyncExec(Category_AsyncExec& p, Params<1>::Type params) : Type_AsyncExec(p, params) {}
+};
+
 struct ExtValue_AsyncExec : public Value_AsyncExec {
-  inline ExtValue_AsyncExec(S<const Type_AsyncExec> p, std::vector<PrimString> command)
+  inline ExtValue_AsyncExec(S<const Type_AsyncExec> p, BoxedValue id, std::vector<PrimString> command)
     : Value_AsyncExec(std::move(p)),
-      id_(TypeInstance::Call(GetType_AsyncId(Params<0>::Type()), Function_AsyncId_new, PassParamsArgs()).At(0)),
+      id_(std::move(id)),
       command_(std::move(command)) {}
 
   ReturnTuple Call_collect(const ParamsArgs& params_args) final {
@@ -168,15 +169,20 @@ Category_AsyncExec& CreateCategory_AsyncExec() {
   return category;
 }
 
-S<const Type_AsyncExec> CreateType_AsyncExec(const Params<0>::Type& params) {
-  static const auto cached = S_get(new ExtType_AsyncExec(CreateCategory_AsyncExec(), Params<0>::Type()));
-  return cached;
+static auto& AsyncExec_instance_cache = *new InstanceCache<1, Type_AsyncExec>([](const Params<1>::Type& params) {
+    return S_get(new ExtType_AsyncExec(CreateCategory_AsyncExec(), params));
+  });
+
+S<const Type_AsyncExec> CreateType_AsyncExec(const Params<1>::Type& params) {
+  return AsyncExec_instance_cache.GetOrCreate(params);
 }
 
-void RemoveType_AsyncExec(const Params<0>::Type& params) {}
+void RemoveType_AsyncExec(const Params<1>::Type& params) {
+  AsyncExec_instance_cache.Remove(params);
+}
 
-BoxedValue CreateValue_AsyncExec(S<const Type_AsyncExec> parent, std::vector<PrimString> command) {
-  return BoxedValue::New<ExtValue_AsyncExec>(std::move(parent), std::move(command));
+BoxedValue CreateValue_AsyncExec(S<const Type_AsyncExec> parent, BoxedValue id, std::vector<PrimString> command) {
+  return BoxedValue::New<ExtValue_AsyncExec>(std::move(parent), std::move(id), std::move(command));
 }
 
 #ifdef ZEOLITE_PUBLIC_NAMESPACE
