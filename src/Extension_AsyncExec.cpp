@@ -21,9 +21,9 @@
 #include "Category_Int.hpp"
 #include "Category_ReadAt.hpp"
 
-#ifdef ZEOLITE_PRIVATE_NAMESPACE
-namespace ZEOLITE_PRIVATE_NAMESPACE {
-#endif  // ZEOLITE_PRIVATE_NAMESPACE
+#ifdef ZEOLITE_PUBLIC_NAMESPACE
+namespace ZEOLITE_PUBLIC_NAMESPACE {
+#endif  // ZEOLITE_PUBLIC_NAMESPACE
 
 BoxedValue CreateValue_AsyncExec(S<const Type_AsyncExec> parent, std::vector<PrimString> command);
 
@@ -179,7 +179,7 @@ BoxedValue CreateValue_AsyncExec(S<const Type_AsyncExec> parent, std::vector<Pri
   return BoxedValue::New<ExtValue_AsyncExec>(std::move(parent), std::move(command));
 }
 
-#ifdef ZEOLITE_PRIVATE_NAMESPACE
-}  // namespace ZEOLITE_PRIVATE_NAMESPACE
-using namespace ZEOLITE_PRIVATE_NAMESPACE;
-#endif  // ZEOLITE_PRIVATE_NAMESPACE
+#ifdef ZEOLITE_PUBLIC_NAMESPACE
+}  // namespace ZEOLITE_PUBLIC_NAMESPACE
+using namespace ZEOLITE_PUBLIC_NAMESPACE;
+#endif  // ZEOLITE_PUBLIC_NAMESPACE

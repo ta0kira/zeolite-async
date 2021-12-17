@@ -240,3 +240,93 @@ define TestNode {
     return outgoing
   }
 }
+
+concrete AsyncSum {
+  refines AsyncNode<AsyncId>
+  refines AsyncValue<Float>
+
+  @type new (DefaultOrder<[AsyncValue<AsFloat>&AsyncNode<AsyncId>]>) -> (#self)
+}
+
+concrete AsyncFactorial {
+  refines AsyncNode<AsyncId>
+  refines AsyncValue<Int>
+
+  @type new (Int) -> (#self)
+}
+
+define AsyncSum {
+  $ReadOnly[id,deps]$
+
+  refines AsyncRun<AsyncId>
+
+  @value AsyncId id
+  @value optional Float result
+  @value DefaultOrder<[AsyncValue<AsFloat>&AsyncNode<AsyncId>]> deps
+
+  new (deps) {
+    return #self{ AsyncId.new(), empty, deps.defaultOrder() `OrderH:copyTo` Vector<[AsyncValue<AsFloat>&AsyncNode<AsyncId>]>.new() }
+  }
+
+  get () { return `require` result }
+  getId () { return id }
+  collect (collector) { \ self `collector.include` deps }
+
+  start () {
+    if (! `present` result) {
+      Float result2 <- 0.0
+      traverse (deps.defaultOrder() -> AsyncValue<AsFloat> dep) {
+        $Hidden[result]$
+        result2 <- result2+dep.get().asFloat()
+      }
+      result <- result2
+    }
+    return self
+  }
+
+  finish () {
+    return self
+  }
+
+  tryFinish () {
+    return `present` result
+  }
+}
+
+define AsyncFactorial {
+  $ReadOnly[id,limit]$
+
+  refines AsyncRun<AsyncId>
+
+  @value AsyncId id
+  @value optional Int result
+  @value Int limit
+
+  new (limit) {
+    return #self{ AsyncId.new(), empty, limit }
+  }
+
+  get () { return `require` result }
+  getId () { return id }
+  collect (collector) { \ self `collector.include` AlwaysEmpty.default() }
+
+  start () {
+    if (! `present` result) {
+      Int result2 <- 1
+      traverse (`Counter.zeroIndexed` limit -> Int minus1) {
+        $Hidden[result]$
+        result2 <- result2*(minus1+1)
+      }
+      result <- result2
+    }
+    return self
+  }
+
+  finish () {
+    return self
+  }
+
+  tryFinish () {
+    return `present` result
+  }
+}

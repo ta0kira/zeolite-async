@@ -1,0 +1,23 @@
+define AsyncId {
+  @category Mutex mutex <- SpinlockMutex.new()
+  @category Int lastId <- 0
+  @value Int id
+
+  new () {
+    scoped {
+      MutexLock lock <- MutexLock.lock(mutex)
+    } cleanup {
+      \ lock.freeResource()
+    } in {
+      return AsyncId{ (lastId <- lastId+1) }
+    }
+  }
+
+  equals (x,y) { return x.id() == y.id() }
+  lessThan (x,y) { return x.id() < y.id() }
+  formatted () { return String.builder().append("AsyncId{").append(id).append("}").build() }
+  hashed () { return id.hashed() }
+
+  @value id () -> (Int)
+  id () { return id }
+}

@@ -1,15 +1,22 @@
 root: ".."
 path: "topo-sort"
+extra_paths: [
+  "topo-sort/src"
+  "topo-sort/test"
+  "topo-sort/working"
+]
+public_deps: [
+  "lib/util"
+]
 private_deps: [
   "lib/container"
-  "lib/util"
   "lib/math"
   "lib/thread"
   "lib/testing"
 ]
 extra_files: [
   category_source {
-    source: "topo-sort/Extension_AsyncExec.cpp"
+    source: "topo-sort/src/Extension_AsyncExec.cpp"
     categories: [AsyncExec]
     requires: [AlwaysEmpty]
   }
