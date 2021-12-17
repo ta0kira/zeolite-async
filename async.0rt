@@ -5,24 +5,34 @@ testcase "AsyncExec tests" {
 
 unittest success {
   AsyncExec command <- "/bin/true" `AsyncExec.withArgs` empty
-  \ command.start().finish()
+  scoped {
+    CollectSingle<AsyncId> collector <- CollectSingle<AsyncId>.new()
+    \ command.collect(collector)
+  } in AsyncRun<AsyncId> node, _ <- collector.get()
+  \ node.start().finish()
   \ UtilTesting.checkSuccess(command.get(),0)
 }
 
-unittest collect {
+unittest blockingNodes {
   AsyncExec command <- "/bin/true" `AsyncExec.withArgs` empty
-  TestCollector collector <- TestCollector.new()
-  \ command.collect(collector)
-  [Container&SetReader<AsyncId>] results <- collector.results()
-  \ Testing.checkEquals(results.size(),1)
-  \ Testing.checkTrue(results.member(command.getId()))
+  scoped {
+    CollectSingle<AsyncId> collector <- CollectSingle<AsyncId>.new()
+    \ command.collect(collector)
+  } in _, DefaultOrder<AsyncNode<AsyncId>> blocking <- collector.get()
+  traverse (blocking.defaultOrder() -> _) {
+    fail("expected empty")
+  }
 }
 
 unittest tryFinish {
   AsyncExec command <- "/bin/sleep" `AsyncExec.withArgs` Vector<Float>.new().append(0.5)
-  \ command.start()
+  scoped {
+    CollectSingle<AsyncId> collector <- CollectSingle<AsyncId>.new()
+    \ command.collect(collector)
+  } in AsyncRun<AsyncId> node, _ <- collector.get()
+  \ node.start()
   Bool pending <- false
-  while (!command.tryFinish()) {
+  while (!node.tryFinish()) {
     pending <- true
   }
   \ UtilTesting.checkSuccess(command.get(),0)
@@ -30,44 +40,32 @@ unittest tryFinish {
 
 unittest idempotent {
   AsyncExec command <- "/bin/true" `AsyncExec.withArgs` empty
-  \ command.start().start().finish().finish()
+  scoped {
+    CollectSingle<AsyncId> collector <- CollectSingle<AsyncId>.new()
+    \ command.collect(collector)
+  } in AsyncRun<AsyncId> node, _ <- collector.get()
+  \ node.start().start().finish().finish()
   \ UtilTesting.checkSuccess(command.get(),0)
 }
 
 unittest failure {
   AsyncExec command <- "/bin/false" `AsyncExec.withArgs` empty
-  \ command.start().finish()
+  scoped {
+    CollectSingle<AsyncId> collector <- CollectSingle<AsyncId>.new()
+    \ command.collect(collector)
+  } in AsyncRun<AsyncId> node, _ <- collector.get()
+  \ node.start().finish()
   \ UtilTesting.checkSuccessBetween(command.get(),0,256)
 }
 
 unittest badBinary {
   AsyncExec command <- "/path/to/bad" `AsyncExec.withArgs` empty
-  \ command.start().finish()
+  scoped {
+    CollectSingle<AsyncId> collector <- CollectSingle<AsyncId>.new()
+    \ command.collect(collector)
+  } in AsyncRun<AsyncId> node, _ <- collector.get()
+  \ node.start().finish()
   \ UtilTesting.checkSuccessBetween(command.get(),0,256)
-}
-
-concrete TestCollector {
-  refines AsyncCollector<AsyncId>
-
-  @type new () -> (TestCollector)
-  @value results () -> ([Container&SetReader<AsyncId>])
-}
-
-define TestCollector {
-  @value HashedSet<AsyncId> added
-
-  new () {
-    return TestCollector{ HashedSet<AsyncId>.new() }
-  }
-
-  include (node,_) {
-    \ added.add(node.getId())
-    return self
-  }
-
-  results () {
-    return added
-  }
 }
 
 
@@ -78,7 +76,11 @@ testcase "AsyncExec finish without start" {
 
 unittest test {
   AsyncExec command <- "/bin/true" `AsyncExec.withArgs` empty
-  \ command.finish()
+  scoped {
+    CollectSingle<AsyncId> collector <- CollectSingle<AsyncId>.new()
+    \ command.collect(collector)
+  } in AsyncRun<AsyncId> node, _ <- collector.get()
+  \ node.finish()
 }
 
 
@@ -89,6 +91,10 @@ testcase "AsyncExec get without start" {
 
 unittest test {
   AsyncExec command <- "/bin/true" `AsyncExec.withArgs` empty
+  scoped {
+    CollectSingle<AsyncId> collector <- CollectSingle<AsyncId>.new()
+    \ command.collect(collector)
+  } in AsyncRun<AsyncId> node, _ <- collector.get()
   \ command.get()
 }
 
@@ -100,5 +106,10 @@ testcase "AsyncExec get without finish" {
 
 unittest test {
   AsyncExec command <- "/bin/true" `AsyncExec.withArgs` empty
-  \ command.start().get()
+  scoped {
+    CollectSingle<AsyncId> collector <- CollectSingle<AsyncId>.new()
+    \ command.collect(collector)
+  } in AsyncRun<AsyncId> node, _ <- collector.get()
+  \ node.start()
+  \ command.get()
 }

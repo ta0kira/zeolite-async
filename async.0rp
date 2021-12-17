@@ -58,7 +58,7 @@ concrete AsyncFactorial {
 }
 
 concrete AsyncExec {
-  refines AsyncRun<AsyncId>
+  refines AsyncNode<AsyncId>
   // Returns exit status or error message.
   refines AsyncValue<ErrorOr<Int>>
 
