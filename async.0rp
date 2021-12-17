@@ -21,16 +21,32 @@ $ModuleOnly$
   get () -> (#x)
 }
 
+@value interface ExecQueue<#id> {
+  nextExec () -> (optional AsyncRun<#id>)
+  nextWait () -> (optional AsyncRun<#id>)
+  finishTask (AsyncRun<#id>) -> (Bool)
+  queueWait (AsyncRun<#id>) -> ()
+}
+
+@value interface TaskRunner<#id> {
+  runAll (ExecQueue<#id>) -> ()
+}
+
 concrete Compute<#id,#x> {
   #id immutable
   #id defines Equals<#id>
   #id requires Hashed
 
-  @category now<#id,#x>
+  @category with<#id,#x>
     #id immutable
     #id defines Equals<#id>
     #id requires Hashed
-  ([AsyncValue<#x>&AsyncNode<#id>]) -> (#x)
+  ([AsyncValue<#x>&AsyncNode<#id>],TaskRunner<#id>) -> (#x)
+}
+
+concrete InlineRunner<#id> {
+  refines TaskRunner<#id>
+  @type new () -> (#self)
 }
 
 concrete AsyncId {

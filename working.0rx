@@ -17,12 +17,12 @@ define TopoTest {
 
   @type runAsyncTest () -> ()
   runAsyncTest () {
-    Float result <- `Compute:now` `AsyncSum.new`
+    Float result <- AsyncSum.new(
         Vector<[AsyncValue<AsFloat>&AsyncNode<AsyncId>]>.new()
             .append(`AsyncFactorial.new` 13)
             .append(`AsyncFactorial.new` 10)
             .append(`AsyncFactorial.new` 9)
-            .append(`AsyncFactorial.new` 5)
+            .append(`AsyncFactorial.new` 5)) `Compute:with` InlineRunner<AsyncId>.new()
     \ BasicOutput.stderr()
         .write(result)
         .write("\n")

@@ -67,18 +67,19 @@ define GetIds {
 }
 
 define Compute {
-  $ReadOnly[idToNode,depends,blocking,execQueue]$
+  $ReadOnly[idToNode,depends,blocking,execQueue,waitQueue]$
 
   refines AsyncCollector<#id>
+  refines ExecQueue<#id>
 
+  // TODO: Add a Mutex.
   @value HashedMap<#id,AsyncRun<#id>> idToNode
   @value HashedMap<#id,HashedSet<#id>> depends
   @value HashedMap<#id,HashedSet<#id>> blocking
   @value Queue<AsyncRun<#id>> execQueue
-  // NOTE: waitQueue needs to be overwritten in runWait().
   @value Queue<AsyncRun<#id>> waitQueue
 
-  now (x) {
+  with (x,runner) {
     Compute<#id,#x> compute <- Compute<#id,#x>{
         HashedMap<#id,AsyncRun<#id>>.new(),
         HashedMap<#id,HashedSet<#id>>.new(),
@@ -86,7 +87,8 @@ define Compute {
         Queue<AsyncRun<#id>>.new(),
         Queue<AsyncRun<#id>>.new() }
     \ x.collect(compute)
-    \ compute.run()
+    \ compute.initQueue()
+    \ runner.runAll(compute)
     return x.get()
   }
 
@@ -115,55 +117,31 @@ define Compute {
     return self
   }
 
-  @value run () -> ()
-  run () {
-    \ initQueue()
-    while (!execQueue.isEmpty() || !waitQueue.isEmpty()) {
-      \ runExec()
-      \ runWait()
+  nextExec () {
+    $Hidden[waitQueue]$
+    if (execQueue.isEmpty()) {
+      return empty
+    } else {
+      return execQueue.pop()
     }
   }
 
-  @value runExec () -> ()
-  runExec () {
-    while (!execQueue.isEmpty()) {
-      AsyncRun<#id> node <- execQueue.pop()
-      \ node.start()
-      if (node.tryFinish()) {
-        \ completeId(node.getId())
-      } else {
-        \ waitQueue.push(node)
-      }
-    }
-  }
-
-  @value runWait () -> ()
-  runWait () {
+  nextWait () {
     $Hidden[execQueue]$
-    // 1. Attempt to finish all nodes in the wait queue without blocking.
-    // 2. If any of them result in another node being unblocked, return control.
-    // 3. Otherwise, do a blocking wait and return as soon as any other nodes
-    //    are unblocked.
-    Bool unblocked <- false
-    Queue<AsyncRun<#id>> waitQueue2 <- Queue<AsyncRun<#id>>.new()
-    while (!waitQueue.isEmpty()) {
-      AsyncRun<#id> node <- waitQueue.pop()
-      if (!node.tryFinish()) {
-        \ waitQueue2.push(node)
-      } else {
-        unblocked <- unblocked || completeId(node.getId())
-      }
+    if (waitQueue.isEmpty()) {
+      return empty
+    } else {
+      return waitQueue.pop()
     }
-    waitQueue <- waitQueue2
-    $Hidden[waitQueue2]$
-    if (!unblocked) {
-      while (!waitQueue.isEmpty()) {
-        AsyncRun<#id> node <- waitQueue.pop().finish()
-        if (completeId(node.getId())) {
-          break
-        }
-      }
-    }
+  }
+
+  finishTask (node) {
+    return completeId(node.getId())
+  }
+
+  queueWait (node) {
+    $Hidden[execQueue]$
+    \ waitQueue.push(node)
   }
 
   @value completeId (#id) -> (Bool)
@@ -187,6 +165,73 @@ define Compute {
     traverse (depends.defaultOrder() -> KeyValue<#id,Container> keyValue) {
       if (keyValue.getValue().size() == 0) {
         \ execQueue.push(`require` `idToNode.get` keyValue.getKey())
+      }
+    }
+  }
+}
+
+define InlineRunner {
+  new () {
+    return #self{ }
+  }
+
+  runAll (queue) {
+    scoped {
+      Bool changed <- true
+    } in while (changed) {
+      changed <- runExec(queue)
+      // Order matters here, due to short-circuiting.
+      changed <- runWait(queue) || changed
+    }
+  }
+
+  @value runExec (ExecQueue<#id>) -> (Bool)
+  runExec (queue) (changed) {
+    changed <- false
+    scoped {
+      optional AsyncRun<#id> node <- empty
+    } in while (`present` (node <- queue.nextExec())) {
+      changed <- true
+      \ require(node).start()
+      if (require(node).tryFinish()) {
+        \ queue.finishTask(`require` node)
+      } else {
+        \ queue.queueWait(`require` node)
+      }
+    }
+  }
+
+  @value runWait (ExecQueue<#id>) -> (Bool)
+  runWait (queue) (changed) {
+    changed <- false
+    // 1. Attempt to finish all nodes in the wait queue without blocking.
+    // 2. If any of them result in another node being unblocked, return control.
+    // 3. Otherwise, do a blocking wait and return as soon as any other nodes
+    //    are unblocked.
+    Bool unblocked <- false
+    Queue<AsyncRun<#id>> waitQueue <- Queue<AsyncRun<#id>>.new()
+    scoped {
+      optional AsyncRun<#id> node <- empty
+    } in while (`present` (node <- queue.nextWait())) {
+      changed <- true
+      if (!require(node).tryFinish()) {
+        \ waitQueue.push(`require` node)
+      } else {
+        unblocked <- unblocked || queue.finishTask(`require` node)
+      }
+    }
+    while (!waitQueue.isEmpty()) {
+      \ queue.queueWait(waitQueue.pop())
+    }
+    $Hidden[waitQueue]$
+    if (!unblocked) {
+      scoped {
+        optional AsyncRun<#id> node <- empty
+      } in while (`present` (node <- queue.nextWait())) {
+        \ require(node).finish()
+        if (queue.finishTask(`require` node)) {
+          break
+        }
       }
     }
   }
