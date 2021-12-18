@@ -6,15 +6,23 @@ define ChainExec {
 
   @value optional ErrorOr<Int> result
   @value #id id
-  @value [AsyncValue<ErrorOr<Int>>&AsyncNode<#id>] exec
-  @value Vector<AsyncRun<#id>> run
+  @value AsyncValue<ErrorOr<Int>>         exec
+  @value Vector<AsyncRun<#id>>            run
   @value Vector<AsyncValue<ErrorOr<Int>>> deps
-  @value Vector<AsyncNode<#id>> blocking
+  @value Vector<AsyncNode<#id>>           blocking
 
   runAfter (exec,nodes) {
-    Vector<AsyncValue<ErrorOr<Int>>> deps <- nodes.defaultOrder() `OrderH:copyTo<AsyncValue<ErrorOr<Int>>,?>` Vector<AsyncValue<ErrorOr<Int>>>.new()
-    Vector<AsyncNode<#id>>       blocking <- nodes.defaultOrder() `OrderH:copyTo<AsyncNode<#id>,?>`           Vector<AsyncNode<#id>>.new()
-    ChainExec<#id> chained <- ChainExec<#id>{ empty, #id.newId(), exec, Vector<AsyncRun<#id>>.new(), deps, blocking }
+    Vector<AsyncValue<ErrorOr<Int>>> deps     <- Vector<AsyncValue<ErrorOr<Int>>>.new()
+    Vector<AsyncNode<#id>>           blocking <- Vector<AsyncNode<#id>>.new()
+    \ nodes.defaultOrder() `OrderH:copyTo<AsyncValue<ErrorOr<Int>>,?>` deps
+    \ nodes.defaultOrder() `OrderH:copyTo<AsyncNode<#id>,?>`           blocking
+    ChainExec<#id> chained <- ChainExec<#id>{
+        empty,
+        #id.newId(),
+        exec,
+        Vector<AsyncRun<#id>>.new(),
+        deps,
+        blocking }
     \ exec.collect(chained)
     return chained
   }
@@ -30,6 +38,15 @@ define ChainExec {
   }
 
   start () {
+    traverse (deps.defaultOrder() -> AsyncValue<ErrorOr<Int>> dep) {
+      scoped {
+        ErrorOr<Int> status <- dep.get()
+      } in if (status.isError() || status.getValue() != 0) {
+        // Don't run the command if a dependency had an error.
+        result <- status
+        return self
+      }
+    }
     traverse (run.defaultOrder() -> AsyncRun<#id> process) {
       \ process.start()
     }
@@ -37,6 +54,10 @@ define ChainExec {
   }
 
   finish () {
+    if (`present` result) {
+      // Command was already skipped due to dependency error.
+      return self
+    }
     traverse (run.defaultOrder() -> AsyncRun<#id> process) {
       \ process.finish()
     }
@@ -44,6 +65,10 @@ define ChainExec {
   }
 
   tryFinish () (complete) {
+    if (`present` result) {
+      // Command was already skipped due to dependency error.
+      return true
+    }
     complete <- true
     traverse (run.defaultOrder() -> AsyncRun<#id> process) {
       // Order matters here, due to short-circuiting.
