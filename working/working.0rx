@@ -3,6 +3,8 @@ concrete TestProgram {
 }
 
 define TestProgram {
+  $ReadOnlyExcept[]$
+
   @category String testProgram <- $ExprLookup[MODULE_PATH]$ + "/test.sh"
 
   run () {

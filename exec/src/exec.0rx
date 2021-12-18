@@ -1,5 +1,5 @@
 define ChainExec {
-  $ReadOnly[id,exec,run,deps,blocking]$
+  $ReadOnlyExcept[result]$
 
   refines AsyncRun<#id>
   refines AsyncCollector<#id>

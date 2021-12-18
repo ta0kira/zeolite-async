@@ -1,4 +1,6 @@
 define AsyncId {
+  $ReadOnlyExcept[lastId]$
+
   @category Mutex mutex <- SpinlockMutex.new()
   @category Int lastId <- 0
   @value Int id

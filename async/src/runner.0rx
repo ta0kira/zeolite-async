@@ -1,4 +1,6 @@
 define InlineRunner {
+  $ReadOnlyExcept[]$
+
   @value Int max
 
   new (max) {
@@ -60,7 +62,7 @@ define InlineRunner {
 }
 
 define Compute {
-  $ReadOnly[mutex,idToNode,depends,blocking,taskQueue,waitQueue]$
+  $ReadOnlyExcept[pendingCount]$
 
   refines TaskQueue<#id>
 
@@ -144,6 +146,7 @@ define Compute {
 
   @value completeId (#id) -> (Bool)
   completeId (id) (unblocked) {
+    $Hidden[waitQueue]$
     pendingCount <- pendingCount-1
     unblocked <- false
     scoped {
@@ -173,6 +176,8 @@ concrete CollectGraph<#id> {
 }
 
 define CollectGraph {
+  $ReadOnlyExcept[currentBlocking]$
+
   @value optional HashedSet<#id> currentBlocking
   @value HashedMap<#id,AsyncRun<#id>> idToNode
   @value HashedMap<#id,HashedSet<#id>> depends
