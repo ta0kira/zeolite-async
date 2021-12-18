@@ -19,7 +19,7 @@
   get () -> (#x)
 }
 
-@value interface ExecQueue<#id> {
+@value interface TaskQueue<#id> {
   nextExec () -> (optional AsyncRun<#id>)
   nextWait () -> (optional AsyncRun<#id>)
   finishTask (AsyncRun<#id>) -> (Bool)
@@ -27,7 +27,7 @@
 }
 
 @value interface TaskRunner<#id> {
-  runAll (ExecQueue<#id>) -> ()
+  runAll (TaskQueue<#id>) -> ()
 }
 
 @type interface UniqueId {

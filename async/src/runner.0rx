@@ -13,7 +13,7 @@ define InlineRunner {
     }
   }
 
-  @value runExec (ExecQueue<#id>) -> (Bool)
+  @value runExec (TaskQueue<#id>) -> (Bool)
   runExec (queue) (changed) {
     changed <- false
     scoped {
@@ -29,7 +29,7 @@ define InlineRunner {
     }
   }
 
-  @value runWait (ExecQueue<#id>) -> (Bool)
+  @value runWait (TaskQueue<#id>) -> (Bool)
   runWait (queue) (changed) {
     changed <- false
     // 1. Attempt to finish all nodes in the wait queue without blocking.
@@ -68,7 +68,7 @@ define Compute {
   $ReadOnly[idToNode,depends,blocking,execQueue,waitQueue]$
 
   refines AsyncCollector<#id>
-  refines ExecQueue<#id>
+  refines TaskQueue<#id>
 
   // TODO: Add a Mutex.
   @value HashedMap<#id,AsyncRun<#id>> idToNode
