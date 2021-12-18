@@ -3,7 +3,7 @@ define AsyncId {
   @category Int lastId <- 0
   @value Int id
 
-  new () {
+  newId () {
     scoped {
       MutexLock lock <- MutexLock.lock(mutex)
     } cleanup {
@@ -11,10 +11,6 @@ define AsyncId {
     } in {
       return AsyncId{ (lastId <- lastId+1) }
     }
-  }
-
-  uniqueId () {
-    return new()
   }
 
   equals (x,y) { return x.id() == y.id() }

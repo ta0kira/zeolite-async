@@ -39,7 +39,7 @@ struct ExtCategory_AsyncExec : public Category_AsyncExec {
       const BoxedValue arg = TypeValue::Call(args, Function_ReadAt_readAt, PassParamsArgs(Box_Int(i))).At(0);
       command.push_back(TypeValue::Call(arg, Function_Formatted_formatted, PassParamsArgs()).At(0).AsString());
     }
-    const BoxedValue id = TypeInstance::Call(Param_id, Function_UniqueId_uniqueId, PassParamsArgs()).At(0);
+    BoxedValue id = TypeInstance::Call(Param_id, Function_UniqueId_newId, PassParamsArgs()).At(0);
     return ReturnTuple(CreateValue_AsyncExec(CreateType_AsyncExec(Params<1>::Type(Param_id)), std::move(id), std::move(command)));
   }
 };
