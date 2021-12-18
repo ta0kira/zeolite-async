@@ -1,0 +1,13 @@
+root: ".."
+path: "topo"
+extra_paths: [
+  "topo/src"
+]
+public_deps: [
+  "lib/container"
+  "lib/math"
+]
+private_deps: [
+  "lib/thread"
+]
+mode: incremental {}

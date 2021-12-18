@@ -1,5 +1,3 @@
-$ModuleOnly$
-
 @value interface GraphNode<|#id> {
   getId () -> (#id)
   outgoing () -> (DefaultOrder<#self>)
