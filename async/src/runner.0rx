@@ -67,53 +67,27 @@ define InlineRunner {
 define Compute {
   $ReadOnly[mutex,idToNode,depends,blocking,execQueue,waitQueue]$
 
-  refines AsyncCollector<#id>
   refines TaskQueue<#id>
 
   @value Mutex mutex
-  @value HashedMap<#id,AsyncRun<#id>> idToNode
-  @value HashedMap<#id,HashedSet<#id>> depends
-  @value HashedMap<#id,HashedSet<#id>> blocking
+  @value KVReader<#id,AsyncRun<#id>>    idToNode
+  @value KVReader<#id,HashedSet<#id>>   depends
+  @value KVExchange<#id,HashedSet<#id>> blocking
   @value Queue<AsyncRun<#id>> execQueue
   @value Queue<AsyncRun<#id>> waitQueue
 
   with (x,runner) {
+    CollectGraph<#id> collector <- CollectGraph<#id>.new()
+    \ x.collect(collector)
     Compute<#id,#x> compute <- Compute<#id,#x>{
         SimpleMutex.new(),
-        HashedMap<#id,AsyncRun<#id>>.new(),
-        HashedMap<#id,HashedSet<#id>>.new(),
-        HashedMap<#id,HashedSet<#id>>.new(),
-        SimpleQueue<AsyncRun<#id>>.new(),
+        collector.idToNode(),
+        collector.depends(),
+        collector.blocking(),
+        collector.execQueue(),
         SimpleQueue<AsyncRun<#id>>.new() }
-    \ x.collect(compute)
-    \ compute.initQueue()
     \ runner.runAll(compute)
     return x.get()
-  }
-
-  include (node,blockers) {
-    scoped {
-      optional HashedSet<#id> existing <- `depends.get` node.getId()
-    } in if (! `present` existing) {
-      #id id <- node.getId()
-      \ id `idToNode.set` node
-      HashedSet<#id> newBlockers <- defer
-      \ id `depends.set` (newBlockers <- HashedSet<#id>.new())
-      // This is used by the parent call.
-      \ id `blocking.set` HashedSet<#id>.new()
-      traverse (blockers.defaultOrder() -> AsyncNode<#id> blocker) {
-        \ blocker.collect(self)
-        GetIds<#id> ids <- GetIds<#id>.new()
-        \ blocker.collect(ids)
-        traverse (ids.allIds().defaultOrder() -> #id id2) {
-          \ newBlockers.add(id2)
-          // NOTE: The recursive call must come before this so that there's a
-          // blocking entry for id2.
-          \ require(blocking.get(id2)).add(id)
-        }
-      }
-    }
-    return self
   }
 
   nextExec () {
@@ -169,45 +143,95 @@ define Compute {
         HashedSet<#id> remaining <- require(depends.get(node)).remove(id)
       } in if (remaining.size() == 0) {
         unblocked <- true
-        \ depends.remove(node)
         \ execQueue.push(`require` `idToNode.get` node)
-      }
-    }
-  }
-
-  @value initQueue () -> ()
-  initQueue () {
-    traverse (depends.defaultOrder() -> KeyValue<#id,Container> keyValue) {
-      if (keyValue.getValue().size() == 0) {
-        \ execQueue.push(`require` `idToNode.get` keyValue.getKey())
       }
     }
   }
 }
 
-concrete GetIds<#id> {
+concrete CollectGraph<#id> {
   refines AsyncCollector<#id>
   #id immutable
   #id defines Equals<#id>
   #id requires Hashed
 
   @type new () -> (#self)
-  @value allIds () -> (DefaultOrder<#id>)
+  @value idToNode  () -> (KVReader<#id,AsyncRun<#id>>)
+  @value depends   () -> (KVReader<#id,HashedSet<#id>>)
+  @value blocking  () -> (KVExchange<#id,HashedSet<#id>>)
+  @value execQueue () -> (Queue<AsyncRun<#id>>)
 }
 
-define GetIds {
-  @value HashedSet<#id> allIds
+define CollectGraph {
+  @value optional HashedSet<#id> currentBlocking
+  @value HashedMap<#id,AsyncRun<#id>> idToNode
+  @value HashedMap<#id,HashedSet<#id>> depends
+  @value HashedMap<#id,HashedSet<#id>> blocking
 
   new () {
-    return #self{ HashedSet<#id>.new() }
+    return #self{
+        empty,
+        HashedMap<#id,AsyncRun<#id>>.new(),
+        HashedMap<#id,HashedSet<#id>>.new(),
+        HashedMap<#id,HashedSet<#id>>.new() }
   }
 
-  include (node,_) {
-    \ allIds.add(node.getId())
+  idToNode () {
+    return idToNode
+  }
+
+  depends () {
+    return depends
+  }
+
+  blocking () {
+    return blocking
+  }
+
+  include (node,blockers) {
+    #id id <- node.getId()
+    $ReadOnly[id]$
+    if (`present` currentBlocking) {
+      \ require(currentBlocking).add(id)
+    }
+    if (! `present` `idToNode.get` node.getId()) {
+      \ id `idToNode.set` node
+      \ id `blocking.set` HashedSet<#id>.new()
+      HashedSet<#id> newBlocking <- HashedSet<#id>.new()
+      // After this scoped block, newBlocking will contain the IDs of all
+      // top-level AsyncRun in blockers. Note that AsyncNode.collect can include
+      // any number of AsyncRun in the collector.
+      scoped {
+        optional HashedSet<#id> oldBlocking <- swapBlocking(newBlocking)
+        $Hidden[newBlocking]$
+      } in {
+        traverse (blockers.defaultOrder() -> AsyncNode<#id> blocker) {
+          \ blocker.collect(self)
+        }
+        \ swapBlocking(oldBlocking)
+      }
+      \ id `depends.set` newBlocking
+      traverse (newBlocking.defaultOrder() -> #id id2) {
+        \ require(blocking.get(id2)).add(id)
+      }
+    }
     return self
   }
 
-  allIds () {
-    return allIds
+  execQueue () {
+    SimpleQueue<AsyncRun<#id>> queue <- SimpleQueue<AsyncRun<#id>>.new()
+    traverse (depends.defaultOrder() -> KeyValue<#id,Container> keyValue) {
+      if (keyValue.getValue().size() == 0) {
+        \ queue.push(`require` `idToNode.get` keyValue.getKey())
+      }
+    }
+    return queue
+  }
+
+  @value swapBlocking (optional HashedSet<#id>) -> (optional HashedSet<#id>)
+  swapBlocking (new) {
+    cleanup {
+      currentBlocking <- new
+    } in return currentBlocking
   }
 }

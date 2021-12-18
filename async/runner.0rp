@@ -4,10 +4,6 @@ concrete InlineRunner<#id> {
 }
 
 concrete Compute<#id,#x> {
-  #id immutable
-  #id defines Equals<#id>
-  #id requires Hashed
-
   @category with<#id,#x>
     #id immutable
     #id defines Equals<#id>
