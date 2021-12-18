@@ -1,0 +1,28 @@
+root: ".."
+path: "exec"
+extra_paths: [
+  "exec/src"
+  "exec/test"
+]
+public_deps: [
+  "../async"
+  "lib/util"
+]
+private_deps: [
+  "lib/container"
+  "lib/testing"
+]
+extra_files: [
+  category_source {
+    source: "exec/src/Extension_AsyncExec.cpp"
+    categories: [AsyncExec]
+    requires: [AlwaysEmpty]
+  }
+]
+extension_specs: [
+  category {
+    name: AsyncExec
+    refines: [AsyncRun<#id>]
+  }
+]
+mode: incremental {}

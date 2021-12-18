@@ -2,7 +2,7 @@ Requires [`zeolite`](https://github.com/ta0kira/zeolite), probably `HEAD`.
 
 ```shell
 # Build all of the modules.
-zeolite -r async topo working
+zeolite -R working
 
 # Run the test program with a simple graph.
 working/TestProgram small

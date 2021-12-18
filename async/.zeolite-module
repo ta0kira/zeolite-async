@@ -2,27 +2,11 @@ root: ".."
 path: "async"
 extra_paths: [
   "async/src"
-  "async/test"
 ]
 public_deps: [
   "lib/util"
 ]
 private_deps: [
   "lib/container"
-  "lib/thread"
-  "lib/testing"
-]
-extra_files: [
-  category_source {
-    source: "async/src/Extension_AsyncExec.cpp"
-    categories: [AsyncExec]
-    requires: [AlwaysEmpty]
-  }
-]
-extension_specs: [
-  category {
-    name: AsyncExec
-    refines: [AsyncRun<#id>]
-  }
 ]
 mode: incremental {}
