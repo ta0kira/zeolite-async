@@ -45,22 +45,21 @@ define InlineRunner {
       if (!require(node).tryFinish()) {
         \ waitQueue.push(`require` node)
       } else {
-        unblocked <- unblocked || queue.finishTask(`require` node)
+        // Order matters here, due to short-circuiting.
+        unblocked <- queue.finishTask(`require` node) || unblocked
+      }
+    }
+    if (!unblocked) {
+      while (waitQueue.size() > 0) {
+        AsyncRun<#id> node <- waitQueue.pop()
+        \ node.finish()
+        if (queue.finishTask(node)) {
+          break
+        }
       }
     }
     while (waitQueue.size() > 0) {
       \ queue.queueWait(waitQueue.pop())
-    }
-    $Hidden[waitQueue]$
-    if (!unblocked) {
-      scoped {
-        optional AsyncRun<#id> node <- empty
-      } in while (`present` (node <- queue.nextWait())) {
-        \ require(node).finish()
-        if (queue.finishTask(`require` node)) {
-          break
-        }
-      }
     }
   }
 }
