@@ -1,12 +1,21 @@
 concrete InlineRunner<#id> {
   refines TaskRunner<#id>
-  @type new () -> (#self)
+
+  // Args:
+  // - Int: Max concurrent tasks, 0 for unlimited.
+  @type new (Int) -> (#self)
 }
 
-concrete Compute<#id,#x> {
+concrete Compute<#id> {
   @category with<#id,#x>
     #id immutable
     #id defines Equals<#id>
     #id requires Hashed
   ([AsyncValue<#x>&AsyncNode<#id>],TaskRunner<#id>) -> (#x)
+
+  @category allWith<#id>
+    #id immutable
+    #id defines Equals<#id>
+    #id requires Hashed
+  (DefaultOrder<AsyncNode<#id>>,TaskRunner<#id>) -> ()
 }

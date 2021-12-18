@@ -3,6 +3,8 @@ concrete TestProgram {
 }
 
 define TestProgram {
+  @category String testProgram <- $ExprLookup[MODULE_PATH]$ + "/test.sh"
+
   run () {
     if (Argv.global().size() < 2 || Argv.global().size() > 3) {
       fail(Argv.global().readAt(0) + " \"async\" | (\"small\"||[size]) (count)")
@@ -15,13 +17,22 @@ define TestProgram {
     }
   }
 
+  @type constructCall (Float,String,Int) -> (ExecCommand<AsyncId>)
+  constructCall (delay,message,status) {
+    return testProgram `AsyncExec:withArgs<AsyncId>` Vector<Formatted>.new()
+      .append(delay)
+      .append(message)
+      .append(status)
+  }
+
   @type runAsyncTest () -> ()
   runAsyncTest () {
-    ExecCommand<AsyncId> exec1 <- "/bin/echo" `AsyncExec:withArgs<AsyncId>` Vector<Formatted>.new().append("exec1")
-    ExecCommand<AsyncId> exec2 <- "/bin/echo" `AsyncExec:withArgs<AsyncId>` Vector<Formatted>.new().append("exec2")
-    ExecCommand<AsyncId> exec3 <- "/bin/echo" `AsyncExec:withArgs<AsyncId>` Vector<Formatted>.new().append("exec3")
-    ExecCommand<AsyncId> exec4 <- "/bin/echo" `AsyncExec:withArgs<AsyncId>` Vector<Formatted>.new().append("exec4")
-    ExecCommand<AsyncId> exec5 <- "/bin/echo" `AsyncExec:withArgs<AsyncId>` Vector<Formatted>.new().append("exec5")
+    ExecCommand<AsyncId> exec1 <- constructCall(0.1,"exec1",0)
+    ExecCommand<AsyncId> exec2 <- constructCall(0.1,"exec2",0)
+    ExecCommand<AsyncId> exec3 <- constructCall(0.1,"exec3",0)
+    ExecCommand<AsyncId> exec4 <- constructCall(0.1,"exec4",0)
+    ExecCommand<AsyncId> exec5 <- constructCall(0.1,"exec5",0)
+    ExecCommand<AsyncId> exec6 <- constructCall(0.1,"exec6",0)
 
     ExecCommand<AsyncId> graph <-
       exec1 `ChainExec:runAfter` Vector<ExecCommand<AsyncId>>.new()
@@ -30,8 +41,9 @@ define TestProgram {
           .append(exec3 `ChainExec:runAfter` Vector<ExecCommand<AsyncId>>.new()
               .append(exec4)
               .append(exec5))
+          .append(exec6)
 
-    ErrorOr<Int> status <- graph `Compute:with` InlineRunner<AsyncId>.new()
+    ErrorOr<Int> status <- graph `Compute:with` InlineRunner<AsyncId>.new(2)
 
     \ BasicOutput.stderr()
         .write(status.getValue())

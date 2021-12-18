@@ -20,7 +20,10 @@
 }
 
 @value interface TaskQueue<#id> {
-  nextExec () -> (optional AsyncRun<#id>)
+  isComplete () -> (Bool)
+  // Args:
+  // - Int: Max concurrent tasks, 0 for unlimited.
+  nextTask (Int) -> (optional AsyncRun<#id>)
   nextWait () -> (optional AsyncRun<#id>)
   finishTask (AsyncRun<#id>) -> (Bool)
   queueWait (AsyncRun<#id>) -> ()

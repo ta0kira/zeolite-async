@@ -1,25 +1,22 @@
 define InlineRunner {
-  new () {
-    return #self{ }
+  @value Int max
+
+  new (max) {
+    return #self{ max }
   }
 
   runAll (queue) {
-    scoped {
-      Bool changed <- true
-    } in while (changed) {
-      changed <- runExec(queue)
-      // Order matters here, due to short-circuiting.
-      changed <- runWait(queue) || changed
+    while (!queue.isComplete()) {
+      \ runTask(queue)
+      \ runWait(queue)
     }
   }
 
-  @value runExec (TaskQueue<#id>) -> (Bool)
-  runExec (queue) (changed) {
-    changed <- false
+  @value runTask (TaskQueue<#id>) -> ()
+  runTask (queue) {
     scoped {
       optional AsyncRun<#id> node <- empty
-    } in while (`present` (node <- queue.nextExec())) {
-      changed <- true
+    } in while (`present` (node <- queue.nextTask(max))) {
       \ require(node).start()
       if (require(node).tryFinish()) {
         \ queue.finishTask(`require` node)
@@ -29,9 +26,8 @@ define InlineRunner {
     }
   }
 
-  @value runWait (TaskQueue<#id>) -> (Bool)
-  runWait (queue) (changed) {
-    changed <- false
+  @value runWait (TaskQueue<#id>) -> ()
+  runWait (queue) {
     // 1. Attempt to finish all nodes in the wait queue without blocking.
     // 2. If any of them result in another node being unblocked, return control.
     // 3. Otherwise, do a blocking wait and return as soon as any other nodes
@@ -41,7 +37,6 @@ define InlineRunner {
     scoped {
       optional AsyncRun<#id> node <- empty
     } in while (`present` (node <- queue.nextWait())) {
-      changed <- true
       if (!require(node).tryFinish()) {
         \ waitQueue.push(`require` node)
       } else {
@@ -65,7 +60,7 @@ define InlineRunner {
 }
 
 define Compute {
-  $ReadOnly[mutex,idToNode,depends,blocking,execQueue,waitQueue]$
+  $ReadOnly[mutex,idToNode,depends,blocking,taskQueue,waitQueue]$
 
   refines TaskQueue<#id>
 
@@ -73,38 +68,52 @@ define Compute {
   @value KVReader<#id,AsyncRun<#id>>    idToNode
   @value KVReader<#id,HashedSet<#id>>   depends
   @value KVExchange<#id,HashedSet<#id>> blocking
-  @value Queue<AsyncRun<#id>> execQueue
+  @value Queue<AsyncRun<#id>> taskQueue
   @value Queue<AsyncRun<#id>> waitQueue
+  @value Int pendingCount
 
-  with (x,runner) {
+  with (node,runner) {
+    \ Vector<AsyncNode<#id>>.new().append(node) `allWith` runner
+    return node.get()
+  }
+
+  allWith (nodes,runner) {
     CollectGraph<#id> collector <- CollectGraph<#id>.new()
-    \ x.collect(collector)
-    Compute<#id,#x> compute <- Compute<#id,#x>{
+    traverse (nodes.defaultOrder() -> AsyncNode<#id> node) {
+      \ node.collect(collector)
+    }
+    Compute<#id> compute <- Compute<#id>{
         SimpleMutex.new(),
         collector.idToNode(),
         collector.depends(),
         collector.blocking(),
-        collector.execQueue(),
-        SimpleQueue<AsyncRun<#id>>.new() }
+        collector.taskQueue(),
+        SimpleQueue<AsyncRun<#id>>.new(),
+        0 }
     \ runner.runAll(compute)
-    return x.get()
   }
 
-  nextExec () {
+  isComplete () {
+    return taskQueue.size()+pendingCount < 1
+  }
+
+  nextTask (max) {
     $Hidden[waitQueue]$
     scoped {
       MutexLock lock <- MutexLock.lock(mutex)
-    } cleanup{
+    } cleanup {
       \ lock.freeResource()
-    } in if (execQueue.size() > 0) {
-      return execQueue.pop()
+    } in if ((max < 1 || pendingCount < max) && taskQueue.size() > 0) {
+      // Only return a task if within the max pending limit.
+      pendingCount <- pendingCount+1
+      return taskQueue.pop()
     } else {
       return empty
     }
   }
 
   nextWait () {
-    $Hidden[execQueue]$
+    $Hidden[taskQueue]$
     scoped {
       MutexLock lock <- MutexLock.lock(mutex)
     } cleanup{
@@ -125,7 +134,7 @@ define Compute {
   }
 
   queueWait (node) {
-    $Hidden[execQueue]$
+    $Hidden[taskQueue]$
     scoped {
       MutexLock lock <- MutexLock.lock(mutex)
     } cleanup{
@@ -135,6 +144,7 @@ define Compute {
 
   @value completeId (#id) -> (Bool)
   completeId (id) (unblocked) {
+    pendingCount <- pendingCount-1
     unblocked <- false
     scoped {
       HashedSet<#id> wasBlocking <- `require` (id `blocking.swap` empty)
@@ -143,7 +153,7 @@ define Compute {
         HashedSet<#id> remaining <- require(depends.get(node)).remove(id)
       } in if (remaining.size() == 0) {
         unblocked <- true
-        \ execQueue.push(`require` `idToNode.get` node)
+        \ taskQueue.push(`require` `idToNode.get` node)
       }
     }
   }
@@ -159,7 +169,7 @@ concrete CollectGraph<#id> {
   @value idToNode  () -> (KVReader<#id,AsyncRun<#id>>)
   @value depends   () -> (KVReader<#id,HashedSet<#id>>)
   @value blocking  () -> (KVExchange<#id,HashedSet<#id>>)
-  @value execQueue () -> (Queue<AsyncRun<#id>>)
+  @value taskQueue () -> (Queue<AsyncRun<#id>>)
 }
 
 define CollectGraph {
@@ -218,7 +228,7 @@ define CollectGraph {
     return self
   }
 
-  execQueue () {
+  taskQueue () {
     SimpleQueue<AsyncRun<#id>> queue <- SimpleQueue<AsyncRun<#id>>.new()
     traverse (depends.defaultOrder() -> KeyValue<#id,Container> keyValue) {
       if (keyValue.getValue().size() == 0) {
