@@ -65,12 +65,12 @@ define InlineRunner {
 }
 
 define Compute {
-  $ReadOnly[idToNode,depends,blocking,execQueue,waitQueue]$
+  $ReadOnly[mutex,idToNode,depends,blocking,execQueue,waitQueue]$
 
   refines AsyncCollector<#id>
   refines TaskQueue<#id>
 
-  // TODO: Add a Mutex.
+  @value Mutex mutex
   @value HashedMap<#id,AsyncRun<#id>> idToNode
   @value HashedMap<#id,HashedSet<#id>> depends
   @value HashedMap<#id,HashedSet<#id>> blocking
@@ -79,6 +79,7 @@ define Compute {
 
   with (x,runner) {
     Compute<#id,#x> compute <- Compute<#id,#x>{
+        SimpleMutex.new(),
         HashedMap<#id,AsyncRun<#id>>.new(),
         HashedMap<#id,HashedSet<#id>>.new(),
         HashedMap<#id,HashedSet<#id>>.new(),
@@ -117,7 +118,11 @@ define Compute {
 
   nextExec () {
     $Hidden[waitQueue]$
-    if (execQueue.size() > 0) {
+    scoped {
+      MutexLock lock <- MutexLock.lock(mutex)
+    } cleanup{
+      \ lock.freeResource()
+    } in if (execQueue.size() > 0) {
       return execQueue.pop()
     } else {
       return empty
@@ -126,7 +131,11 @@ define Compute {
 
   nextWait () {
     $Hidden[execQueue]$
-    if (waitQueue.size() > 0) {
+    scoped {
+      MutexLock lock <- MutexLock.lock(mutex)
+    } cleanup{
+      \ lock.freeResource()
+    } in if (waitQueue.size() > 0) {
       return waitQueue.pop()
     } else {
       return empty
@@ -134,12 +143,20 @@ define Compute {
   }
 
   finishTask (node) {
-    return completeId(node.getId())
+    scoped {
+      MutexLock lock <- MutexLock.lock(mutex)
+    } cleanup{
+      \ lock.freeResource()
+    } in return completeId(node.getId())
   }
 
   queueWait (node) {
     $Hidden[execQueue]$
-    \ waitQueue.push(node)
+    scoped {
+      MutexLock lock <- MutexLock.lock(mutex)
+    } cleanup{
+      \ lock.freeResource()
+    } in \ waitQueue.push(node)
   }
 
   @value completeId (#id) -> (Bool)
