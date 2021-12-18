@@ -8,6 +8,6 @@ private_deps: [
   "lib/thread"
 ]
 mode: binary {
-  category: TopoTest
+  category: TestProgram
   function: run
 }

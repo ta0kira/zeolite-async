@@ -1,8 +1,8 @@
-concrete TopoTest {
+concrete TestProgram {
   @type run () -> ()
 }
 
-define TopoTest {
+define TestProgram {
   run () {
     if (Argv.global().size() < 2 || Argv.global().size() > 3) {
       fail(Argv.global().readAt(0) + " \"async\" | (\"small\"||[size]) (count)")
