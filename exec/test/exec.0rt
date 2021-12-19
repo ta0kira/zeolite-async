@@ -1,5 +1,7 @@
 testcase "Command tests" {
   success
+  exclude stdout "."
+  exclude stderr "."
   timeout 5
 }
 
@@ -40,13 +42,19 @@ unittest idempotent {
 unittest failure {
   Command command <- CommandBuilder.for("/bin/false").build()
   \ command.start().finish()
-  \ UtilTesting.checkSuccessBetween(command.get(),0,256)
+  \ UtilTesting.checkSuccessBetween(command.get(),1,255)
 }
 
-unittest badBinary {
+
+testcase "Command bad program name" {
+  success
+  require stderr "/path/to/bad"
+}
+
+unittest test {
   Command command <- CommandBuilder.for("/path/to/bad").build()
   \ command.start().finish()
-  \ UtilTesting.checkSuccessBetween(command.get(),0,256)
+  \ UtilTesting.checkSuccessBetween(command.get(),1,255)
 }
 
 

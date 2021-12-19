@@ -134,7 +134,9 @@ struct ExtValue_Command : public Value_Command {
       }
       argv[command_.size()] = nullptr;
       raise(SIGSTOP);
-      _exit(execvp(argv[0], argv.get()));
+      execvp(argv[0], argv.get());
+      std::cerr << "Error executing " << command_[0] << ": " << strerror(errno) << std::endl;
+      _exit(1);
     } else {
       MaybeCloseFd(stdin_);
       MaybeCloseFd(stdout_);
