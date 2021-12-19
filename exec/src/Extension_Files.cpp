@@ -29,9 +29,9 @@ struct ExtType_Files : public Type_Files {
     }
     int status = 0;
     if (blocking) {
-      status = fcntl(fd, F_SETFL & ~O_NONBLOCK);
+      status = fcntl(fd, F_SETFL, old & ~O_NONBLOCK);
     } else {
-      status = fcntl(fd, F_SETFL | O_NONBLOCK);
+      status = fcntl(fd, F_SETFL, old | O_NONBLOCK);
     }
     if (status < 0) {
       FAIL() << "Failed to set flags for descriptor " << fd << ": " << strerror(errno);
@@ -58,9 +58,9 @@ struct ExtType_Files : public Type_Files {
     }
     int status = 0;
     if (cloexec) {
-      status = fcntl(fd, F_SETFD | FD_CLOEXEC);
+      status = fcntl(fd, F_SETFD, old | FD_CLOEXEC);
     } else {
-      status = fcntl(fd, F_SETFD & ~FD_CLOEXEC);
+      status = fcntl(fd, F_SETFD, old & ~FD_CLOEXEC);
     }
     if (status < 0) {
       FAIL() << "Failed to set flags for descriptor " << fd << ": " << strerror(errno);

@@ -94,6 +94,9 @@ struct ExtValue_Command : public Value_Command {
       argv[command_.size()] = nullptr;
       _exit(execvp(argv[0], argv.get()));
     } else {
+      MaybeCloseFd(stdin_);
+      MaybeCloseFd(stdout_);
+      MaybeCloseFd(stderr_);
       executed_ = true;
     }
     if (process_ < 0) {
@@ -170,6 +173,13 @@ struct ExtValue_Command : public Value_Command {
     } else {
       // Not exited yet.
       return false;
+    }
+  }
+
+  static void MaybeCloseFd(const BoxedValue& descriptor) {
+    const int fd = ExtractFd(descriptor);
+    if (fd > 2) {
+      close(fd);
     }
   }
 

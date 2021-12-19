@@ -112,3 +112,19 @@ unittest test {
       .build()
       .runOnce()
 }
+
+
+testcase "CommandPipe tests" {
+  success
+  require stdout "exec\.0rp"
+  require stdout "src"
+  exclude stdout "test"
+  timeout 5
+}
+
+unittest test {
+  CommandBuilder ls   <- CommandBuilder.for("/bin/ls").addArg($ExprLookup[MODULE_PATH]$)
+  CommandBuilder grep <- CommandBuilder.for("/bin/egrep").addArg("-v").addArg("test")
+  [AsyncTask&AsyncValue<ErrorOr<Int>>] command <- CommandPipe.start(ls).pipeStdout(grep).build()
+  \ UtilTesting.checkSuccess(command.start().finish().get(),0)
+}

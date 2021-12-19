@@ -136,3 +136,105 @@ define FileDescriptor {
   stderr () { return new(2) }
   get () { return fd }
 }
+
+concrete AggregateCommand {
+  refines AsyncTask
+  refines AsyncValue<ErrorOr<Int>>
+
+  @type new (DefaultOrder<[AsyncTask&AsyncValue<ErrorOr<Int>>]>) -> (#self)
+}
+
+define AggregateCommand {
+  $ReadOnlyExcept[result]$
+
+  @value optional ErrorOr<Int> result
+  @value DefaultOrder<[AsyncTask&AsyncValue<ErrorOr<Int>>]> commands
+
+  new (commands) {
+    return #self{
+        empty,
+        commands.defaultOrder() `OrderH:copyTo` Vector<[AsyncTask&AsyncValue<ErrorOr<Int>>]>.new() }
+  }
+
+  start () {
+    if (`present` result) {
+      return self
+    }
+    traverse (commands.defaultOrder() -> AsyncTask command) {
+      \ command.start()
+    }
+    return self
+  }
+
+  finish () {
+    if (`present` result) {
+      return self
+    }
+    traverse (commands.defaultOrder() -> AsyncTask command) {
+      \ command.finish()
+    }
+    return self
+  }
+
+  tryFinish () (complete) {
+    if (`present` result) {
+      return true
+    }
+    complete <- true
+    traverse (commands.defaultOrder() -> AsyncTask command) {
+      complete <- command.tryFinish() && complete
+    }
+  }
+
+  get () {
+    if (! `present` result) {
+      ErrorOr<Int> result2 <- ErrorOr:value(0)
+      traverse (commands.defaultOrder() -> AsyncValue<ErrorOr<Int>> node) {
+        ErrorOr<Int> value <- node.get()
+        if (value.isError() || value.getValue() != 1) {
+          result2 <- value
+          break
+        }
+      }
+      result <- result2
+    }
+    return `require` result
+  }
+}
+
+define CommandPipe {
+  @value Vector<CommandBuilder> builders
+  @value CommandBuilder lastBuilder
+
+  start (builder) {
+    return #self{
+        Vector<CommandBuilder>.new().append(builder),
+        builder }
+  }
+
+  pipeStdout (builder) {
+    \ builders.append(builder)
+    FileDescriptor read, FileDescriptor write <- Files.pipe()
+    \ `lastBuilder.setStdout` Files.closeExec(write,true)
+    \ `builder.setStdin`      Files.closeExec(read,true)
+    lastBuilder <- builder
+    return self
+  }
+
+  pipeStderr (builder) {
+    \ builders.append(builder)
+    FileDescriptor read, FileDescriptor write <- Files.pipe()
+    \ `lastBuilder.setStderr` Files.closeExec(write,true)
+    \ `builder.setStdin`      Files.closeExec(read,true)
+    lastBuilder <- builder
+    return self
+  }
+
+  build () {
+    Vector<Command> commands <- Vector<Command>.new()
+    traverse (builders.defaultOrder() -> CommandBuilder builder) {
+      \ commands.append(builder.build())
+    }
+    return AggregateCommand.new(commands)
+  }
+}
