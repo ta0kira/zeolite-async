@@ -101,7 +101,6 @@ struct ExtValue_Command : public Value_Command {
   ReturnTuple Call_runDetached(const ParamsArgs& params_args) final {
     TRACE_FUNCTION("Command.runDetached")
     Start(true);
-    Call_start(PassParamsArgs());
     return ReturnTuple(Call_get(PassParamsArgs()));
   }
 
@@ -124,7 +123,7 @@ struct ExtValue_Command : public Value_Command {
       if (detached) {
         // This makes sure that killing the parent's process group doesn't kill
         // this process. Otherwise, runDetached() wouldn't work as expected.
-        setpgid(0, 0);
+        setsid();
       }
       MaybeSetFd(stdin_,  STDIN_FILENO,  "stdin");
       MaybeSetFd(stdout_, STDOUT_FILENO, "stdout");
@@ -148,8 +147,8 @@ struct ExtValue_Command : public Value_Command {
     } else {
       int status = 0;
       // Wait for the process to stop right before execvp. This is to ensure
-      // that signal handlers, pgid, etc. are configured in the child before the
-      // parent has a chance to kill the child.
+      // that signal handlers, session, etc. are configured in the child before
+      // the parent has a chance to kill the child.
       while (waitpid(process_, &status, WUNTRACED) == 0 && !WIFEXITED(status) && !WIFSTOPPED(status));
       kill(process_, SIGCONT);
       // Wait for the process to continue.
