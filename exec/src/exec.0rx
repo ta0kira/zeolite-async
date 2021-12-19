@@ -1,3 +1,48 @@
+define AsyncExec {
+  $ReadOnlyExcept[]$
+
+  refines AsyncRun<#id>
+
+  @value #id id
+  @value Command command
+
+  withArgs (command,args) {
+    return AsyncExec<#id>{
+        #id.newId(),
+        (args `ReadAtH:copyTo` CommandBuilder.for(command)).build() }
+  }
+
+  runOnce () {
+    return start().finish().get()
+  }
+
+  getId () {
+    return id
+  }
+
+  collect (collector) {
+    \ collector.include(self,AlwaysEmpty.default())
+  }
+
+  start () {
+    \ command.start()
+    return self
+  }
+
+  finish () {
+    \ command.finish()
+    return self
+  }
+
+  tryFinish () {
+    return command.tryFinish()
+  }
+
+  get () {
+    return command.get()
+  }
+}
+
 define ChainExec {
   $ReadOnlyExcept[result]$
 
@@ -109,6 +154,10 @@ define CommandBuilder {
 
   for (command) {
     return CommandBuilder{ command, Vector<String>.new(), "", "", "" }
+  }
+
+  append (arg) {
+    return addArg(arg)
   }
 
   addArg (arg) {

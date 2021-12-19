@@ -14,19 +14,8 @@ private_deps: [
 ]
 extra_files: [
   category_source {
-    source: "exec/src/Extension_AsyncExec.cpp"
-    categories: [AsyncExec]
-    requires: [AlwaysEmpty]
-  }
-  category_source {
     source: "exec/src/Extension_Command.cpp"
     categories: [Command]
-  }
-]
-extension_specs: [
-  category {
-    name: AsyncExec
-    refines: [AsyncRun<#id>]
   }
 ]
 mode: incremental {}

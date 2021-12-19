@@ -35,6 +35,7 @@ concrete Command {
 
 concrete CommandBuilder {
   refines Build<Command>
+  refines Append<Formatted>
 
   @type for (String) -> (CommandBuilder)
 
