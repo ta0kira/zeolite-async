@@ -24,3 +24,22 @@ concrete ChainExec<#id> {
     #id defines UniqueId
   (ExecCommand<#id>,DefaultOrder<ExecCommand<#id>>) -> (ChainExec<#id>)
 }
+
+concrete Command {
+  refines AsyncTask
+  refines AsyncValue<ErrorOr<Int>>
+
+  @type new (String,ReadAt<String>,String,String,String) -> (Command)
+  @value runOnce () -> (ErrorOr<Int>)
+}
+
+concrete CommandBuilder {
+  refines Build<Command>
+
+  @type for (String) -> (CommandBuilder)
+
+  @value addArg    (Formatted) -> (#self)
+  @value setStdin  (String)    -> (#self)
+  @value setStdout (String)    -> (#self)
+  @value setStderr (String)    -> (#self)
+}

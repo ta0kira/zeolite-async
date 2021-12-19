@@ -6,9 +6,9 @@ extra_paths: [
 ]
 public_deps: [
   "lib/util"
-  "lib/testing"
 ]
 private_deps: [
   "lib/container"
+  "lib/testing"
 ]
 mode: incremental {}

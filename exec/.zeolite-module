@@ -18,6 +18,10 @@ extra_files: [
     categories: [AsyncExec]
     requires: [AlwaysEmpty]
   }
+  category_source {
+    source: "exec/src/Extension_Command.cpp"
+    categories: [Command]
+  }
 ]
 extension_specs: [
   category {

@@ -2,13 +2,17 @@
   collect (AsyncCollector<#id>) -> ()
 }
 
-@value interface AsyncRun<|#id> {
-  refines AsyncNode<#id>
-
-  getId () -> (#id)
+@value interface AsyncTask {
   start () -> (#self)
   finish () -> (#self)
   tryFinish () -> (Bool)
+}
+
+@value interface AsyncRun<|#id> {
+  refines AsyncNode<#id>
+  refines AsyncTask
+
+  getId () -> (#id)
 }
 
 @value interface AsyncCollector<#id|> {

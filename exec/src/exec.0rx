@@ -97,3 +97,41 @@ define ChainExec {
     return `require` result
   }
 }
+
+define CommandBuilder {
+  $ReadOnly[command,args]$
+
+  @value String command
+  @value [ReadAt<String>&Append<String>] args
+  @value String stdin
+  @value String stdout
+  @value String stderr
+
+  for (command) {
+    return CommandBuilder{ command, Vector<String>.new(), "", "", "" }
+  }
+
+  addArg (arg) {
+    \ args.append(arg.formatted())
+    return self
+  }
+
+  setStdin (stdin2) {
+    stdin <- stdin2
+    return self
+  }
+
+  setStdout (stdout2) {
+    stdout <- stdout2
+    return self
+  }
+
+  setStderr (stderr2) {
+    stderr <- stderr2
+    return self
+  }
+
+  build () {
+    return Command.new(command,args,stdin,stdout,stderr)
+  }
+}

@@ -1,8 +1,0 @@
-$ModuleOnly$
-$TestsOnly$
-
-concrete CollectSingle<#id> {
-  refines AsyncCollector<#id>
-  @type new () -> (#self)
-  @value get () -> (AsyncRun<#id>,DefaultOrder<AsyncNode<#id>>)
-}

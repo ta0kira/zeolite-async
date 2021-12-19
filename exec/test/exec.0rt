@@ -1,20 +1,16 @@
-testcase "AsyncExec tests" {
+testcase "Command tests" {
   success
   timeout 5
 }
 
 unittest success {
-  AsyncExec<AsyncId> command <- "/bin/true" `AsyncExec:withArgs<AsyncId>` AlwaysEmpty.default()
-  scoped {
-    CollectSingle<AsyncId> collector <- CollectSingle<AsyncId>.new()
-    \ command.collect(collector)
-  } in AsyncRun<AsyncId> node, _ <- collector.get()
-  \ node.start().finish()
+  Command command <- CommandBuilder.for("/bin/true").build()
+  \ command.start().finish()
   \ UtilTesting.checkSuccess(command.get(),0)
 }
 
 unittest runOnce {
-  AsyncExec<AsyncId> command <- "/bin/sleep" `AsyncExec:withArgs<AsyncId>` Vector<Int>.new().append(1)
+  Command command <- CommandBuilder.for("/bin/sleep").addArg(0.1).build()
   // Make sure the count here is > the testcase timeout.
   \ UtilTesting.checkSuccess(command.runOnce(),0)
   \ UtilTesting.checkSuccess(command.runOnce(),0)
@@ -25,103 +21,64 @@ unittest runOnce {
   \ UtilTesting.checkSuccess(command.get(),0)
 }
 
-unittest blockingNodes {
-  AsyncExec<AsyncId> command <- "/bin/true" `AsyncExec:withArgs<AsyncId>` AlwaysEmpty.default()
-  scoped {
-    CollectSingle<AsyncId> collector <- CollectSingle<AsyncId>.new()
-    \ command.collect(collector)
-  } in _, DefaultOrder<AsyncNode<AsyncId>> blocking <- collector.get()
-  traverse (blocking.defaultOrder() -> _) {
-    fail("expected empty")
-  }
-}
-
 unittest tryFinish {
-  AsyncExec<AsyncId> command <- "/bin/sleep" `AsyncExec:withArgs<AsyncId>` Vector<Float>.new().append(0.5)
-  scoped {
-    CollectSingle<AsyncId> collector <- CollectSingle<AsyncId>.new()
-    \ command.collect(collector)
-  } in AsyncRun<AsyncId> node, _ <- collector.get()
-  \ node.start()
+  Command command <- CommandBuilder.for("/bin/sleep").addArg(0.5).build()
+  \ command.start()
   Bool pending <- false
-  while (!node.tryFinish()) {
+  while (!command.tryFinish()) {
     pending <- true
   }
   \ UtilTesting.checkSuccess(command.get(),0)
 }
 
 unittest idempotent {
-  AsyncExec<AsyncId> command <- "/bin/true" `AsyncExec:withArgs<AsyncId>` AlwaysEmpty.default()
-  scoped {
-    CollectSingle<AsyncId> collector <- CollectSingle<AsyncId>.new()
-    \ command.collect(collector)
-  } in AsyncRun<AsyncId> node, _ <- collector.get()
-  \ node.start().start().finish().finish()
+  Command command <- CommandBuilder.for("/bin/true").build()
+  \ command.start().start().finish().finish()
   \ UtilTesting.checkSuccess(command.get(),0)
 }
 
 unittest failure {
-  AsyncExec<AsyncId> command <- "/bin/false" `AsyncExec:withArgs<AsyncId>` AlwaysEmpty.default()
-  scoped {
-    CollectSingle<AsyncId> collector <- CollectSingle<AsyncId>.new()
-    \ command.collect(collector)
-  } in AsyncRun<AsyncId> node, _ <- collector.get()
-  \ node.start().finish()
+  Command command <- CommandBuilder.for("/bin/false").build()
+  \ command.start().finish()
   \ UtilTesting.checkSuccessBetween(command.get(),0,256)
 }
 
 unittest badBinary {
-  AsyncExec<AsyncId> command <- "/path/to/bad" `AsyncExec:withArgs<AsyncId>` AlwaysEmpty.default()
-  scoped {
-    CollectSingle<AsyncId> collector <- CollectSingle<AsyncId>.new()
-    \ command.collect(collector)
-  } in AsyncRun<AsyncId> node, _ <- collector.get()
-  \ node.start().finish()
+  Command command <- CommandBuilder.for("/path/to/bad").build()
+  \ command.start().finish()
   \ UtilTesting.checkSuccessBetween(command.get(),0,256)
 }
 
 
-testcase "AsyncExec finish without start" {
+testcase "Command finish without start" {
   crash
   require "started"
 }
 
 unittest test {
-  AsyncExec<AsyncId> command <- "/bin/true" `AsyncExec:withArgs<AsyncId>` AlwaysEmpty.default()
-  scoped {
-    CollectSingle<AsyncId> collector <- CollectSingle<AsyncId>.new()
-    \ command.collect(collector)
-  } in AsyncRun<AsyncId> node, _ <- collector.get()
-  \ node.finish()
+  Command command <- CommandBuilder.for("/bin/true").build()
+  \ command.finish()
 }
 
 
-testcase "AsyncExec get without start" {
+testcase "Command get without start" {
   crash
   require "started"
 }
 
 unittest test {
-  AsyncExec<AsyncId> command <- "/bin/true" `AsyncExec:withArgs<AsyncId>` AlwaysEmpty.default()
-  scoped {
-    CollectSingle<AsyncId> collector <- CollectSingle<AsyncId>.new()
-    \ command.collect(collector)
-  } in AsyncRun<AsyncId> node, _ <- collector.get()
+  Command command <- CommandBuilder.for("/bin/true").build()
   \ command.get()
 }
 
 
-testcase "AsyncExec get without finish" {
+testcase "Command get without finish" {
   crash
   require "completed"
 }
 
 unittest test {
-  AsyncExec<AsyncId> command <- "/bin/true" `AsyncExec:withArgs<AsyncId>` AlwaysEmpty.default()
-  scoped {
-    CollectSingle<AsyncId> collector <- CollectSingle<AsyncId>.new()
-    \ command.collect(collector)
-  } in AsyncRun<AsyncId> node, _ <- collector.get()
-  \ node.start()
+  Command command <- CommandBuilder.for("/bin/true").build()
+  \ command.start()
   \ command.get()
 }
