@@ -1,3 +1,4 @@
+#include <sstream>
 #include <vector>
 
 #include <fcntl.h>
@@ -41,14 +42,11 @@ struct ExtType_Command : public Type_Command {
 struct ExtValue_Command : public Value_Command {
   inline ExtValue_Command(S<const Type_Command> p, const ParamsArgs& params_args)
     : Value_Command(std::move(p)),
-      // command_ filled below using args 0 and 1.
-      stdin_(params_args.GetArg(2)),
-      stdout_(params_args.GetArg(3)),
-      stderr_(params_args.GetArg(4)) {
-    MaybeFlagsFd(stdin_);
-    MaybeFlagsFd(stdout_);
-    MaybeFlagsFd(stderr_);
-    command_.push_back(params_args.GetArg(0).AsString());
+      // Setting command_[0] allows GetFd to set error_ with the command name if necessary.
+      command_{params_args.GetArg(0).AsString()},
+      stdin_(GetFd(params_args.GetArg(2))),
+      stdout_(GetFd(params_args.GetArg(3))),
+      stderr_(GetFd(params_args.GetArg(4))) {
     const BoxedValue& args = params_args.GetArg(1);
     const PrimInt count = TypeValue::Call(args, Function_Container_size, PassParamsArgs()).At(0).AsInt();
     for (int i = 0; i < count; ++i) {
@@ -125,9 +123,9 @@ struct ExtValue_Command : public Value_Command {
         // this process. Otherwise, runDetached() wouldn't work as expected.
         setsid();
       }
-      MaybeSetFd(stdin_,  STDIN_FILENO,  "stdin");
-      MaybeSetFd(stdout_, STDOUT_FILENO, "stdout");
-      MaybeSetFd(stderr_, STDERR_FILENO, "stderr");
+      SetFd(stdin_,  STDIN_FILENO,  "stdin");
+      SetFd(stdout_, STDOUT_FILENO, "stdout");
+      SetFd(stderr_, STDERR_FILENO, "stderr");
       std::unique_ptr<char*[]> argv(new char*[command_.size()+1]);
       for (int i = 0; i < command_.size(); ++i) {
         argv[i] = const_cast<char*>(command_[i].c_str());
@@ -138,28 +136,40 @@ struct ExtValue_Command : public Value_Command {
       std::cerr << "Error executing " << command_[0] << ": " << strerror(errno) << std::endl;
       _exit(1);
     } else {
-      MaybeCloseFd(stdin_);
-      MaybeCloseFd(stdout_);
-      MaybeCloseFd(stderr_);
+      CloseFd(stdin_);
+      CloseFd(stdout_);
+      CloseFd(stderr_);
       executed_ = true;
     }
     if (process_ < 0) {
-      error_ = strerror(errno);
+      SetError(strerror(errno));
       finished_ = true;
     } else {
       int status = 0;
+      int result = 0;
       // Wait for the process to stop right before execvp. This is to ensure
       // that signal handlers, session, etc. are configured in the child before
       // the parent has a chance to kill the child.
-      while (waitpid(process_, &status, WUNTRACED) == 0 && !WIFEXITED(status) && !WIFSTOPPED(status));
+      while ((result = waitpid(process_, &status, WUNTRACED)) == 0 && !WIFEXITED(status) && !WIFSTOPPED(status));
       kill(process_, SIGCONT);
       // Wait for the process to continue.
-      while (waitpid(process_, &status, WCONTINUED) == 0 && !WIFEXITED(status) && !WIFCONTINUED(status));
+      while ((result = waitpid(process_, &status, WCONTINUED)) == 0 && !WIFEXITED(status) && !WIFCONTINUED(status));
       if (detached) {
         finished_ = true;
         status_ = 0;
       }
+      if (result < 1) {
+        // The only exit calls before execvp are related to file descriptors.
+        finished_ = true;
+        SetError("Error setting file descriptors");
+      }
     }
+  }
+
+  void SetError(const std::string& message) {
+    std::ostringstream error;
+    error << "Error executing " << command_[0] << ": " << message;
+    error_ = error.str();
   }
 
   bool Finish(bool block) {
@@ -181,7 +191,7 @@ struct ExtValue_Command : public Value_Command {
       return true;
     } else if (result < 0) {
       // Error with wait call.
-      error_ = strerror(errno);
+      SetError(strerror(errno));
       finished_ = true;
       return true;
     } else {
@@ -190,16 +200,8 @@ struct ExtValue_Command : public Value_Command {
     }
   }
 
-  static void MaybeFlagsFd(const BoxedValue& descriptor) {
-    const int fd = ExtractFd(descriptor);
-    if (fd > 2) {
-      fcntl(fd, F_SETFD, fcntl(fd, F_GETFD) | FD_CLOEXEC);
-    }
-  }
-
-  static void MaybeSetFd(const BoxedValue& descriptor, int dest, const std::string& name) {
-    const int source = ExtractFd(descriptor);
-    if (source >= 0 && source != dest) {
+  static void SetFd(int source, int dest, const std::string& name) {
+    if (source >= 0) {
       if (dup2(source, dest) < 0) {
         std::cerr << "Failed to set " << name << ": " << strerror(errno) << std::endl;
         _exit(1);
@@ -207,19 +209,34 @@ struct ExtValue_Command : public Value_Command {
     }
   }
 
-  static void MaybeCloseFd(const BoxedValue& descriptor) {
-    const int fd = ExtractFd(descriptor);
+  static void CloseFd(int fd) {
     if (fd > 2) {
       close(fd);
     }
   }
 
-  static int ExtractFd(const BoxedValue& descriptor) {
-    if (!BoxedValue::Present(descriptor)) {
-      return -1;
-    } else {
-      return TypeValue::Call(BoxedValue::Require(descriptor), Function_FileDescriptor_get, PassParamsArgs()).At(0).AsInt();
+  int GetFd(const BoxedValue& descriptor) {
+    int fd = -1;
+    if (!finished_ && BoxedValue::Present(descriptor)) {
+      fd = TypeValue::Call(BoxedValue::Require(descriptor),
+                           Function_FileDescriptor_get,
+                           PassParamsArgs()).At(0).AsInt();
+      if (fd >= 0 && fd <= 2) {
+        // This prevents latent issues if stdout or stderr is redirected to the
+        // other, and then also replaced.
+        fd = dup(fd);
+        if (fd < 0) {
+          // This might happen if the parent process is out of file descriptors.
+          executed_ = true;
+          finished_ = true;
+          SetError(strerror(errno));
+        }
+      }
+      if (fd > 2) {
+        fcntl(fd, F_SETFD, fcntl(fd, F_GETFD) | FD_CLOEXEC);
+      }
     }
+    return fd;
   }
 
   bool executed_ = false;
@@ -228,9 +245,9 @@ struct ExtValue_Command : public Value_Command {
   std::string error_;
   pid_t process_ = 0;
   std::vector<PrimString> command_;
-  const BoxedValue stdin_;
-  const BoxedValue stdout_;
-  const BoxedValue stderr_;
+  const int stdin_;
+  const int stdout_;
+  const int stderr_;
 };
 
 Category_Command& CreateCategory_Command() {

@@ -149,6 +149,7 @@ unittest test {
   \ CommandBuilder.for("/bin/echo")
       .addArg("message")
       .setStdout(FileDescriptor.stderr())
+      .setStderr(FileDescriptor.stdout())
       .build()
       .runOnce()
 }
@@ -163,9 +164,23 @@ testcase "Command replace stderr" {
 unittest test {
   \ CommandBuilder.for("/bin/sleep")
       .addArg("message")
+      .setStdout(FileDescriptor.stderr())
       .setStderr(FileDescriptor.stdout())
       .build()
       .runOnce()
+}
+
+
+testcase "Command bad descriptor" {
+  success
+  require stderr "stdout"
+  exclude stderr "/path/to/bad"
+}
+
+unittest test {
+  Command command <- CommandBuilder.for("/path/to/bad").setStdout(FileDescriptor.new(5555)).build()
+  \ command.start().finish()
+  \ UtilTesting.checkError(command.get())
 }
 
 
