@@ -23,6 +23,7 @@ concrete Command {
             (Command)
 
   @value runOnce () -> (ErrorOr<Int>)
+  @value runDetached () -> (ErrorOr<Int>)
 }
 
 concrete CommandBuilder {

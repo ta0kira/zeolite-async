@@ -3,6 +3,7 @@
 #include <fcntl.h>
 #include <string.h>
 #include <unistd.h>
+#include <signal.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 
@@ -52,6 +53,12 @@ struct ExtValue_Command : public Value_Command {
     }
   }
 
+  ~ExtValue_Command() {
+    if (executed_ && process_ > 0 && !finished_) {
+      kill(process_, SIGTERM);
+    }
+  }
+
   ReturnTuple Call_finish(const ParamsArgs& params_args) final {
     TRACE_FUNCTION("AsyncExec.finish")
     Finish(true);
@@ -79,19 +86,52 @@ struct ExtValue_Command : public Value_Command {
 
   ReturnTuple Call_start(const ParamsArgs& params_args) final {
     TRACE_FUNCTION("Command.start")
+    Start(false);
+    return ReturnTuple(VAR_SELF);
+  }
+
+  ReturnTuple Call_tryFinish(const ParamsArgs& params_args) final {
+    TRACE_FUNCTION("Command.tryFinish")
+    return ReturnTuple(Box_Bool(Finish(false)));
+  }
+
+  ReturnTuple Call_runDetached(const ParamsArgs& params_args) final {
+    TRACE_FUNCTION("Command.runDetached")
+    Start(true);
+    Call_start(PassParamsArgs());
+    return ReturnTuple(Call_get(PassParamsArgs()));
+  }
+
+  ReturnTuple Call_runOnce(const ParamsArgs& params_args) final {
+    TRACE_FUNCTION("Command.runOnce")
+    Call_start(PassParamsArgs());
+    Call_finish(PassParamsArgs());
+    return ReturnTuple(Call_get(PassParamsArgs()));
+  }
+
+  void Start(bool detached) {
     if (executed_) {
-      return ReturnTuple(VAR_SELF);
+      return;
     }
     process_ = fork();
     if (process_ == 0) {
-      SetStdin();
-      SetStdout();
-      SetStderr();
+      // This makes sure that an immediate call to ~ExtValue_Command() in the
+      // parent doesn't create a stack trace in the child.
+      signal(SIGTERM, SIG_DFL);
+      if (detached) {
+        // This makes sure that killing the parent's process group doesn't kill
+        // this process. Otherwise, runDetached() wouldn't work as expected.
+        setpgid(0, 0);
+      }
+      MaybeSetFd(stdin_,  STDIN_FILENO,  "stdin");
+      MaybeSetFd(stdout_, STDOUT_FILENO, "stdout");
+      MaybeSetFd(stderr_, STDERR_FILENO, "stderr");
       std::unique_ptr<char*[]> argv(new char*[command_.size()+1]);
       for (int i = 0; i < command_.size(); ++i) {
         argv[i] = const_cast<char*>(command_[i].c_str());
       }
       argv[command_.size()] = nullptr;
+      raise(SIGSTOP);
       _exit(execvp(argv[0], argv.get()));
     } else {
       MaybeCloseFd(stdin_);
@@ -102,48 +142,18 @@ struct ExtValue_Command : public Value_Command {
     if (process_ < 0) {
       error_ = strerror(errno);
       finished_ = true;
-    }
-    return ReturnTuple(VAR_SELF);
-  }
-
-  ReturnTuple Call_tryFinish(const ParamsArgs& params_args) final {
-    TRACE_FUNCTION("Command.tryFinish")
-    return ReturnTuple(Box_Bool(Finish(false)));
-  }
-
-  ReturnTuple Call_runOnce(const ParamsArgs& params_args) final {
-    TRACE_FUNCTION("Command.runOnce")
-    Call_start(PassParamsArgs());
-    Call_finish(PassParamsArgs());
-    return ReturnTuple(Call_get(PassParamsArgs()));
-  }
-
-  void SetStdin() const {
-    const int stdin2 = ExtractFd(stdin_);
-    if (stdin2 >= 0 && stdin2 != STDIN_FILENO) {
-      if (dup2(stdin2, STDIN_FILENO) < 0) {
-        std::cerr << "Failed to set stdin: " << strerror(errno) << std::endl;
-        _exit(1);
-      }
-    }
-  }
-
-  void SetStdout() const {
-    const int stdout2 = ExtractFd(stdout_);
-    if (stdout2 >= 0 && stdout2 != STDOUT_FILENO) {
-      if (dup2(stdout2, STDOUT_FILENO) < 0) {
-        std::cerr << "Failed to set stdout: " << strerror(errno) << std::endl;
-        _exit(1);
-      }
-    }
-  }
-
-  void SetStderr() const {
-    const int stderr2 = ExtractFd(stderr_);
-    if (stderr2 >= 0 && stderr2 != STDERR_FILENO) {
-      if (dup2(stderr2, STDERR_FILENO) < 0) {
-        std::cerr << "Failed to set stderr: " << strerror(errno) << std::endl;
-        _exit(1);
+    } else {
+      int status = 0;
+      // Wait for the process to stop right before execvp. This is to ensure
+      // that signal handlers, pgid, etc. are configured in the child before the
+      // parent has a chance to kill the child.
+      while (waitpid(process_, &status, WUNTRACED) == 0 && !WIFEXITED(status) && !WIFSTOPPED(status));
+      kill(process_, SIGCONT);
+      // Wait for the process to continue.
+      while (waitpid(process_, &status, WCONTINUED) == 0 && !WIFEXITED(status) && !WIFCONTINUED(status));
+      if (detached) {
+        finished_ = true;
+        status_ = 0;
       }
     }
   }
@@ -157,7 +167,7 @@ struct ExtValue_Command : public Value_Command {
     }
     int status = 0;
     int result = 0;
-    while ((result = waitpid(process_, &status, block ? 0 : WNOHANG)) == 0 && WIFEXITED(status)) {
+    while ((result = waitpid(process_, &status, block ? 0 : WNOHANG)) == 0 && !WIFEXITED(status)) {
       if (!block) break;
     }
     if (result > 0) {
@@ -173,6 +183,16 @@ struct ExtValue_Command : public Value_Command {
     } else {
       // Not exited yet.
       return false;
+    }
+  }
+
+  static void MaybeSetFd(const BoxedValue& boxed, int dest, const std::string& name) {
+    const int source = ExtractFd(boxed);
+    if (source >= 0 && source != dest) {
+      if (dup2(source, dest) < 0) {
+        std::cerr << "Failed to set " << name << ": " << strerror(errno) << std::endl;
+        _exit(1);
+      }
     }
   }
 

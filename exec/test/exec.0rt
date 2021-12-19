@@ -50,6 +50,53 @@ unittest badBinary {
 }
 
 
+testcase "Command runDetached disables cleanup" {
+  success
+  require "success"
+  exclude "EXIT"
+  timeout 5
+}
+
+unittest test {
+  String shellCommand <- "trap 'echo EXIT' EXIT; sleep 0.5; trap '' EXIT; echo success"
+  \ CommandBuilder.for("/bin/bash").addArg("-c").addArg(shellCommand).build().runDetached()
+  // Give the command time to finish.
+  \ Realtime.sleepSeconds(1.0)
+}
+
+
+testcase "Command automatic cleanup of unfinished" {
+  success
+  require "EXIT"
+  timeout 5
+}
+
+unittest test {
+  String shellCommand <- "trap 'echo EXIT' EXIT; sleep 10; trap '' EXIT"
+  scoped {
+    Command command <- CommandBuilder.for("/bin/bash").addArg("-c").addArg(shellCommand).build().start()
+  } in \ Realtime.sleepSeconds(0.1)  // Give the command time to start.
+  // Give the command time to process the signal.
+  \ Realtime.sleepSeconds(0.1)
+}
+
+
+testcase "Command no cleanup of finished" {
+  success
+  exclude "EXIT"
+  timeout 5
+}
+
+unittest test {
+  String shellCommand <- "trap 'echo EXIT' EXIT; sleep 1; trap '' EXIT"
+  scoped {
+    Command command <- CommandBuilder.for("/bin/bash").addArg("-c").addArg(shellCommand).build().start().finish()
+  } in \ Realtime.sleepSeconds(0.1)  // Give the command time to start.
+  // Give the command time to process the signal.
+  \ Realtime.sleepSeconds(0.1)
+}
+
+
 testcase "Command finish without start" {
   crash
   require "started"
@@ -111,6 +158,49 @@ unittest test {
       .setStderr(FileDescriptor.stdout())
       .build()
       .runOnce()
+}
+
+
+testcase "set non-blocking" {
+  success
+  exclude "exec\.0rp"
+}
+
+unittest test {
+  CommandBuilder ls   <- CommandBuilder.for("/bin/ls").addArg($ExprLookup[MODULE_PATH]$)
+  CommandBuilder grep <- CommandBuilder.for("/bin/egrep").addArg("-v").addArg("test")
+  FileDescriptor read, FileDescriptor write <- Files.pipe()
+  \ ls.setStdout(write `Files.closeExec` true)
+  \ grep.setStdin(read `Files.closeExec` true `Files.blocking` false)
+  Command lsCommand   <- ls.build()
+  Command grepCommand <- grep.build()
+  // grep should exit because its stdin is non-blocking and there isn't input yet.
+  \ grepCommand.start()
+  \ Realtime.sleepSeconds(0.1)
+  \ lsCommand.start().finish()
+  \ grepCommand.finish()
+}
+
+
+testcase "set blocking" {
+  success
+  require stdout "exec\.0rp"
+  require stdout "src"
+  exclude stdout "test"
+}
+
+unittest test {
+  CommandBuilder ls   <- CommandBuilder.for("/bin/ls").addArg($ExprLookup[MODULE_PATH]$)
+  CommandBuilder grep <- CommandBuilder.for("/bin/egrep").addArg("-v").addArg("test")
+  FileDescriptor read, FileDescriptor write <- Files.pipe()
+  \ ls.setStdout(write `Files.closeExec` true)
+  \ grep.setStdin(read `Files.closeExec` true)
+  Command lsCommand   <- ls.build()
+  Command grepCommand <- grep.build()
+  \ grepCommand.start()
+  \ Realtime.sleepSeconds(0.1)
+  \ lsCommand.start().finish()
+  \ grepCommand.finish()
 }
 
 

@@ -11,6 +11,7 @@ public_deps: [
 private_deps: [
   "lib/container"
   "lib/testing"
+  "lib/thread"
 ]
 extra_files: [
   category_source {
