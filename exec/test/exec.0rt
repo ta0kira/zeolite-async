@@ -93,7 +93,7 @@ testcase "Command replace stdout" {
 unittest test {
   \ CommandBuilder.for("/bin/echo")
       .addArg("message")
-      .setStdout(2)
+      .setStdout(FileDescriptor.stderr())
       .build()
       .runOnce()
 }
@@ -108,7 +108,7 @@ testcase "Command replace stderr" {
 unittest test {
   \ CommandBuilder.for("/bin/sleep")
       .addArg("message")
-      .setStderr(1)
+      .setStderr(FileDescriptor.stdout())
       .build()
       .runOnce()
 }

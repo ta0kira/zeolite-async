@@ -13,7 +13,13 @@ concrete Command {
   refines AsyncTask
   refines AsyncValue<ErrorOr<Int>>
 
-  @type new (String,ReadAt<String>,Int,Int,Int) -> (Command)
+  @type new (String,
+             ReadAt<String>,
+             optional FileDescriptor,
+             optional FileDescriptor,
+             optional FileDescriptor) ->
+            (Command)
+
   @value runOnce () -> (ErrorOr<Int>)
 }
 
@@ -24,15 +30,18 @@ concrete CommandBuilder {
   @type for (String) -> (CommandBuilder)
 
   @value addArg    (Formatted) -> (#self)
-  @value setStdin  (Int)       -> (#self)
-  @value setStdout (Int)       -> (#self)
-  @value setStderr (Int)       -> (#self)
+  @value setStdin  (optional FileDescriptor) -> (#self)
+  @value setStdout (optional FileDescriptor) -> (#self)
+  @value setStderr (optional FileDescriptor) -> (#self)
 }
 
 concrete FileDescriptor {
   immutable
 
   @type new (Int) -> (FileDescriptor)
+  @type stdin () -> (FileDescriptor)
+  @type stdout () -> (FileDescriptor)
+  @type stderr () -> (FileDescriptor)
   @value get () -> (Int)
 }
 

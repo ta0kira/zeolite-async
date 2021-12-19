@@ -90,12 +90,12 @@ define CommandBuilder {
 
   @value String command
   @value [ReadAt<String>&Append<String>] args
-  @value Int stdin
-  @value Int stdout
-  @value Int stderr
+  @value optional FileDescriptor stdin
+  @value optional FileDescriptor stdout
+  @value optional FileDescriptor stderr
 
   for (command) {
-    return CommandBuilder{ command, Vector<String>.new(), -1, -1, -1 }
+    return CommandBuilder{ command, Vector<String>.new(), empty, empty, empty }
   }
 
   append (arg) {
@@ -131,5 +131,8 @@ define FileDescriptor {
   @value Int fd
 
   new (fd) { return FileDescriptor{ fd } }
+  stdin () { return new(0) }
+  stdout () { return new(1) }
+  stderr () { return new(2) }
   get () { return fd }
 }

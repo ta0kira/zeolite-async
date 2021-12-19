@@ -14,6 +14,7 @@
 #include "Category_Command.hpp"
 #include "Category_Container.hpp"
 #include "Category_ErrorOr.hpp"
+#include "Category_FileDescriptor.hpp"
 #include "Category_Int.hpp"
 #include "Category_ReadAt.hpp"
 #include "Category_String.hpp"
@@ -40,9 +41,9 @@ struct ExtValue_Command : public Value_Command {
   inline ExtValue_Command(S<const Type_Command> p, const ParamsArgs& params_args)
     : Value_Command(std::move(p)),
       // command_ filled below using args 0 and 1.
-      stdin_(params_args.GetArg(2).AsInt()),
-      stdout_(params_args.GetArg(3).AsInt()),
-      stderr_(params_args.GetArg(4).AsInt()) {
+      stdin_(params_args.GetArg(2)),
+      stdout_(params_args.GetArg(3)),
+      stderr_(params_args.GetArg(4)) {
     command_.push_back(params_args.GetArg(0).AsString());
     const BoxedValue& args = params_args.GetArg(1);
     const PrimInt count = TypeValue::Call(args, Function_Container_size, PassParamsArgs()).At(0).AsInt();
@@ -115,8 +116,9 @@ struct ExtValue_Command : public Value_Command {
   }
 
   void SetStdin() const {
-    if (stdin_ >= 0 && stdin_ != STDIN_FILENO) {
-      if (dup2(stdin_, STDIN_FILENO) < 0) {
+    const int stdin2 = ExtractFd(stdin_);
+    if (stdin2 >= 0 && stdin2 != STDIN_FILENO) {
+      if (dup2(stdin2, STDIN_FILENO) < 0) {
         std::cerr << "Failed to set stdin: " << strerror(errno) << std::endl;
         _exit(1);
       }
@@ -124,8 +126,9 @@ struct ExtValue_Command : public Value_Command {
   }
 
   void SetStdout() const {
-    if (stdout_ >= 0 && stdout_ != STDOUT_FILENO) {
-      if (dup2(stdout_, STDOUT_FILENO) < 0) {
+    const int stdout2 = ExtractFd(stdout_);
+    if (stdout2 >= 0 && stdout2 != STDOUT_FILENO) {
+      if (dup2(stdout2, STDOUT_FILENO) < 0) {
         std::cerr << "Failed to set stdout: " << strerror(errno) << std::endl;
         _exit(1);
       }
@@ -133,8 +136,9 @@ struct ExtValue_Command : public Value_Command {
   }
 
   void SetStderr() const {
-    if (stderr_ >= 0 && stderr_ != STDERR_FILENO) {
-      if (dup2(stderr_, STDERR_FILENO) < 0) {
+    const int stderr2 = ExtractFd(stderr_);
+    if (stderr2 >= 0 && stderr2 != STDERR_FILENO) {
+      if (dup2(stderr2, STDERR_FILENO) < 0) {
         std::cerr << "Failed to set stderr: " << strerror(errno) << std::endl;
         _exit(1);
       }
@@ -169,15 +173,23 @@ struct ExtValue_Command : public Value_Command {
     }
   }
 
+  static int ExtractFd(const BoxedValue& descriptor) {
+    if (!BoxedValue::Present(descriptor)) {
+      return -1;
+    } else {
+      return TypeValue::Call(BoxedValue::Require(descriptor), Function_FileDescriptor_get, PassParamsArgs()).At(0).AsInt();
+    }
+  }
+
   bool executed_ = false;
   bool finished_ = false;
   int status_ = 0;
   std::string error_;
   pid_t process_ = 0;
   std::vector<PrimString> command_;
-  const PrimInt stdin_;
-  const PrimInt stdout_;
-  const PrimInt stderr_;
+  const BoxedValue stdin_;
+  const BoxedValue stdout_;
+  const BoxedValue stderr_;
 };
 
 Category_Command& CreateCategory_Command() {
