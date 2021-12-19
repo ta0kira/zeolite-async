@@ -58,6 +58,17 @@ unittest test {
 }
 
 
+testcase "Command runDetached preserves previous result" {
+  success
+}
+
+unittest test {
+  Command command <- CommandBuilder.for("/bin/false").build()
+  \ command.runOnce()
+  \ UtilTesting.checkSuccessBetween(command.runDetached(),1,255)
+}
+
+
 testcase "Command runDetached disables cleanup" {
   success
   require "success"
