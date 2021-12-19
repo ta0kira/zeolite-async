@@ -45,6 +45,9 @@ struct ExtValue_Command : public Value_Command {
       stdin_(params_args.GetArg(2)),
       stdout_(params_args.GetArg(3)),
       stderr_(params_args.GetArg(4)) {
+    MaybeFlagsFd(stdin_);
+    MaybeFlagsFd(stdout_);
+    MaybeFlagsFd(stderr_);
     command_.push_back(params_args.GetArg(0).AsString());
     const BoxedValue& args = params_args.GetArg(1);
     const PrimInt count = TypeValue::Call(args, Function_Container_size, PassParamsArgs()).At(0).AsInt();
@@ -186,8 +189,15 @@ struct ExtValue_Command : public Value_Command {
     }
   }
 
-  static void MaybeSetFd(const BoxedValue& boxed, int dest, const std::string& name) {
-    const int source = ExtractFd(boxed);
+  static void MaybeFlagsFd(const BoxedValue& descriptor) {
+    const int fd = ExtractFd(descriptor);
+    if (fd > 2) {
+      fcntl(fd, F_SETFD, fcntl(fd, F_GETFD) | FD_CLOEXEC);
+    }
+  }
+
+  static void MaybeSetFd(const BoxedValue& descriptor, int dest, const std::string& name) {
+    const int source = ExtractFd(descriptor);
     if (source >= 0 && source != dest) {
       if (dup2(source, dest) < 0) {
         std::cerr << "Failed to set " << name << ": " << strerror(errno) << std::endl;

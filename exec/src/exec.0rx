@@ -215,8 +215,8 @@ define CommandPipe {
   pipeStdout (builder) {
     \ builders.append(builder)
     FileDescriptor read, FileDescriptor write <- Files.pipe()
-    \ `lastBuilder.setStdout` Files.closeExec(write,true)
-    \ `builder.setStdin`      Files.closeExec(read,true)
+    \ `lastBuilder.setStdout` write
+    \ `builder.setStdin`      read
     lastBuilder <- builder
     return self
   }
@@ -224,8 +224,8 @@ define CommandPipe {
   pipeStderr (builder) {
     \ builders.append(builder)
     FileDescriptor read, FileDescriptor write <- Files.pipe()
-    \ `lastBuilder.setStderr` Files.closeExec(write,true)
-    \ `builder.setStdin`      Files.closeExec(read,true)
+    \ `lastBuilder.setStderr` write
+    \ `builder.setStdin`      read
     lastBuilder <- builder
     return self
   }
