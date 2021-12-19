@@ -119,8 +119,6 @@ struct ExtValue_Command : public Value_Command {
       if (dup2(stdin_, STDIN_FILENO) < 0) {
         std::cerr << "Failed to set stdin: " << strerror(errno) << std::endl;
         _exit(1);
-      } else {
-        close(stdin_);
       }
     }
   }
@@ -130,8 +128,6 @@ struct ExtValue_Command : public Value_Command {
       if (dup2(stdout_, STDOUT_FILENO) < 0) {
         std::cerr << "Failed to set stdout: " << strerror(errno) << std::endl;
         _exit(1);
-      } else {
-        close(stdout_);
       }
     }
   }
@@ -141,8 +137,6 @@ struct ExtValue_Command : public Value_Command {
       if (dup2(stderr_, STDERR_FILENO) < 0) {
         std::cerr << "Failed to set stderr: " << strerror(errno) << std::endl;
         _exit(1);
-      } else {
-        close(stderr_);
       }
     }
   }

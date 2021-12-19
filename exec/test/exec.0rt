@@ -82,3 +82,33 @@ unittest test {
   \ command.start()
   \ command.get()
 }
+
+
+testcase "Command replace stdout" {
+  success
+  require stderr "message"
+  exclude stdout "message"
+}
+
+unittest test {
+  \ CommandBuilder.for("/bin/echo")
+      .addArg("message")
+      .setStdout(2)
+      .build()
+      .runOnce()
+}
+
+
+testcase "Command replace stderr" {
+  success
+  require stdout "message"
+  exclude stderr "message"
+}
+
+unittest test {
+  \ CommandBuilder.for("/bin/sleep")
+      .addArg("message")
+      .setStderr(1)
+      .build()
+      .runOnce()
+}
