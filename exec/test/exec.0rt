@@ -125,6 +125,6 @@ testcase "CommandPipe tests" {
 unittest test {
   CommandBuilder ls   <- CommandBuilder.for("/bin/ls").addArg($ExprLookup[MODULE_PATH]$)
   CommandBuilder grep <- CommandBuilder.for("/bin/egrep").addArg("-v").addArg("test")
-  [AsyncTask&AsyncValue<ErrorOr<Int>>] command <- CommandPipe.start(ls).pipeStdout(grep).build()
+  [AsyncTask&AsyncValue<ErrorOr<Int>>] command <- CommandPipe.begin(ls).pipeStdout(grep).build()
   \ UtilTesting.checkSuccess(command.start().finish().get(),0)
 }

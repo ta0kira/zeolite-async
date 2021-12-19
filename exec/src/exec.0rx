@@ -206,7 +206,7 @@ define CommandPipe {
   @value Vector<CommandBuilder> builders
   @value CommandBuilder lastBuilder
 
-  start (builder) {
+  begin (builder) {
     return #self{
         Vector<CommandBuilder>.new().append(builder),
         builder }

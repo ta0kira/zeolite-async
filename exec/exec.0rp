@@ -61,7 +61,7 @@ concrete Files {
 concrete CommandPipe {
   refines Build<[AsyncTask&AsyncValue<ErrorOr<Int>>]>
 
-  @type start (CommandBuilder) -> (#self)
+  @type begin (CommandBuilder) -> (#self)
   @value pipeStdout (CommandBuilder) -> (#self)
   @value pipeStderr (CommandBuilder) -> (#self)
 }
