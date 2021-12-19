@@ -1,0 +1,13 @@
+concrete AsyncConst<#x> {
+  refines AsyncNode<all>
+  refines AsyncValue<#x>
+
+  @category from<#x> (#x) -> (AsyncConst<#x>)
+}
+
+concrete AsyncSumInt<#id> {
+  refines AsyncNode<#id>
+  refines AsyncValue<Int>
+
+  @category from<#id> (DefaultOrder<[AsyncNode<#id>&AsyncValue<AsInt>]>) -> (AsyncSumInt<#id>)
+}

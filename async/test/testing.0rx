@@ -1,0 +1,44 @@
+$TestsOnly$
+
+define Factorial {
+  $ReadOnlyExcept[result]$
+
+  refines AsyncRun<AsyncId>
+
+  @value optional Int result
+  @value AsyncId id
+  @value Int max
+
+  new (max) {
+    return Factorial{ empty, AsyncId.newId(), max }
+  }
+
+  collect (collector) {
+    \ collector.include(self,AlwaysEmpty.default())
+  }
+
+  get () {
+    return `require` result
+  }
+
+  getId () {
+    return id
+  }
+
+  start () {
+    Int result2 <- 1
+    traverse (`Counter.zeroIndexed` max -> Int iMinus1) {
+      result2 <- result2*(iMinus1+1)
+    }
+    result <- result2
+    return self
+  }
+
+  finish () {
+    return self
+  }
+
+  tryFinish () {
+    return `present` result
+  }
+}

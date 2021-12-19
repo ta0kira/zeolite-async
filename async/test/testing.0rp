@@ -1,0 +1,9 @@
+$ModuleOnly$
+$TestsOnly$
+
+concrete Factorial {
+  refines AsyncNode<AsyncId>
+  refines AsyncValue<Int>
+
+  @type new (Int) -> (Factorial)
+}

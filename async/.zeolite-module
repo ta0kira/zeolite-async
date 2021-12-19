@@ -2,9 +2,11 @@ root: ".."
 path: "async"
 extra_paths: [
   "async/src"
+  "async/test"
 ]
 public_deps: [
   "lib/util"
+  "lib/testing"
 ]
 private_deps: [
   "lib/container"

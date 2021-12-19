@@ -1,0 +1,16 @@
+testcase "AsyncSumInt tests" {
+  success
+}
+
+unittest test {
+  [AsyncNode<AsyncId>&AsyncValue<Int>] node <-
+    `AsyncSumInt:from` Vector<[AsyncNode<AsyncId>&AsyncValue<AsInt>]>.new()
+        .append(AsyncConst:from(1000.0))
+        .append(Factorial.new(5))
+        .append(AsyncConst:from('A'))
+        .append(Factorial.new(3))
+
+  Int expected <- 1000 + 5*4*3*2 + 'A'.asInt() + 3*2
+
+  \ Testing.checkEquals(node `Compute:with` InlineRunner<AsyncId>.new(0),expected)
+}

@@ -1,0 +1,39 @@
+define AsyncConst {
+  $ReadOnlyExcept[]$
+
+  @value #x value
+
+  from (value) { return AsyncConst<#x>{ value } }
+  get () { return value }
+  collect (_) { }
+}
+
+define AsyncSumInt {
+  $ReadOnlyExcept[result]$
+
+  @value optional Int result
+  @value DefaultOrder<[AsyncNode<#id>&AsyncValue<AsInt>]> depends
+
+  from (depends) {
+    return AsyncSumInt<#id>{
+        empty,
+        depends.defaultOrder() `OrderH:copyTo` Vector<[AsyncNode<#id>&AsyncValue<AsInt>]>.new() }
+  }
+
+  get () {
+    if (! `present` result) {
+      Int result2 <- 0
+      traverse (depends.defaultOrder() -> AsyncValue<AsInt> value) {
+        result2 <- result2+value.get().asInt()
+      }
+      result <- result2
+    }
+    return `require` result
+  }
+
+  collect (collector) {
+    traverse (depends.defaultOrder() -> AsyncNode<#id> node) {
+      \ node.collect(collector)
+    }
+  }
+}
