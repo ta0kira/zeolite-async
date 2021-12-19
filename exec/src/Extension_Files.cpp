@@ -1,10 +1,13 @@
 #include <fcntl.h>
 #include <string.h>
 #include <unistd.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 
 #include "category-source.hpp"
 #include "Streamlined_Files.hpp"
 #include "Category_Bool.hpp"
+#include "Category_ErrorOr.hpp"
 #include "Category_FileDescriptor.hpp"
 #include "Category_Files.hpp"
 
@@ -81,6 +84,23 @@ struct ExtType_Files : public Type_Files {
                                                 Function_FileDescriptor_new,
                                                 PassParamsArgs(Box_Int(pipes[1]))).At(0);
     return ReturnTuple(pipe0, pipe1);
+  }
+
+  ReturnTuple Call_validate(const ParamsArgs& params_args) const final {
+    TRACE_FUNCTION("Files.validate")
+    const BoxedValue& descriptor = params_args.GetArg(0);
+    const PrimInt fd = TypeValue::Call(descriptor, Function_FileDescriptor_get, PassParamsArgs()).At(0).AsInt();
+    struct stat statbuf;
+    if (fstat(fd, &statbuf) < 0) {
+      // Return ErrorOr:error(error_).
+      return ReturnTuple(GetCategory_ErrorOr().Call(
+        Function_ErrorOr_error, PassParamsArgs(Box_String(strerror(errno)))));
+    } else {
+      // Return ErrorOr:value(status_).
+      return ReturnTuple(GetCategory_ErrorOr().Call(
+        Function_ErrorOr_value, PassParamsArgs(GetType_FileDescriptor(Params<0>::Type()), descriptor)));
+    }
+    return ReturnTuple();
   }
 };
 

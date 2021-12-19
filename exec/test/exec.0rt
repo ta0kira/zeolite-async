@@ -171,16 +171,13 @@ unittest test {
 }
 
 
-testcase "Command bad descriptor" {
-  success
-  require stderr "stdout"
-  exclude stderr "/path/to/bad"
+testcase "FileDescriptor bad descriptor" {
+  crash
+  require "5555"
 }
 
 unittest test {
-  Command command <- CommandBuilder.for("/path/to/bad").setStdout(FileDescriptor.new(5555)).build()
-  \ command.start().finish()
-  \ UtilTesting.checkError(command.get())
+  \ FileDescriptor.new(5555)
 }
 
 

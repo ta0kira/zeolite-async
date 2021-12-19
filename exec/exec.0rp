@@ -57,6 +57,7 @@ concrete Files {
   @type close (FileDescriptor) -> ()
   @type closeExec (FileDescriptor,Bool) -> (FileDescriptor)
   @type blocking (FileDescriptor,Bool) -> (FileDescriptor)
+  @type validate (FileDescriptor) -> (ErrorOr<FileDescriptor>)
 }
 
 concrete CommandPipe {
