@@ -1,80 +1,29 @@
-define AsyncExec {
-  $ReadOnlyExcept[]$
-
-  refines AsyncRun<#id>
-
-  @value #id id
-  @value Command command
-
-  withArgs (command,args) {
-    return AsyncExec<#id>{
-        #id.newId(),
-        (args `ReadAtH:copyTo` CommandBuilder.for(command)).build() }
-  }
-
-  runOnce () {
-    return start().finish().get()
-  }
-
-  getId () {
-    return id
-  }
-
-  collect (collector) {
-    \ collector.include(self,AlwaysEmpty.default())
-  }
-
-  start () {
-    \ command.start()
-    return self
-  }
-
-  finish () {
-    \ command.finish()
-    return self
-  }
-
-  tryFinish () {
-    return command.tryFinish()
-  }
-
-  get () {
-    return command.get()
-  }
-}
-
 define ChainExec {
-  $ReadOnlyExcept[result]$
+  $ReadOnlyExcept[result,locked]$
 
   refines AsyncRun<#id>
-  refines AsyncCollector<#id>
 
   @value optional ErrorOr<Int> result
   @value #id id
-  @value AsyncValue<ErrorOr<Int>>         exec
-  @value Vector<AsyncRun<#id>>            run
-  @value Vector<AsyncValue<ErrorOr<Int>>> deps
-  @value Vector<AsyncNode<#id>>           blocking
+  @value [AsyncTask&AsyncValue<ErrorOr<Int>>] command
+  @value Vector<[AsyncNode<#id>&AsyncValue<ErrorOr<Int>>]> deps
+  // TODO: This is kind of a hack => make it safe at compile time.
+  @value Bool locked
 
-  runAfter (exec,nodes) {
-    Vector<AsyncValue<ErrorOr<Int>>> deps     <- Vector<AsyncValue<ErrorOr<Int>>>.new()
-    Vector<AsyncNode<#id>>           blocking <- Vector<AsyncNode<#id>>.new()
-    \ nodes.defaultOrder() `OrderH:copyTo<AsyncValue<ErrorOr<Int>>,?>` deps
-    \ nodes.defaultOrder() `OrderH:copyTo<AsyncNode<#id>,?>`           blocking
-    ChainExec<#id> chained <- ChainExec<#id>{
+  asyncRun (command) {
+    return ChainExec<#id>{
         empty,
         #id.newId(),
-        exec,
-        Vector<AsyncRun<#id>>.new(),
-        deps,
-        blocking }
-    \ exec.collect(chained)
-    return chained
+        command,
+        Vector<[AsyncNode<#id>&AsyncValue<ErrorOr<Int>>]>.new(),
+        false }
   }
 
-  include (node,blocking2) {
-    \ run.append(node)
-    \ blocking2.defaultOrder() `OrderH:copyTo` blocking
+  after (dep) {
+    if (locked) {
+      fail("command already started")
+    }
+    \ deps.append(dep)
     return self
   }
 
@@ -92,9 +41,7 @@ define ChainExec {
         return self
       }
     }
-    traverse (run.defaultOrder() -> AsyncRun<#id> process) {
-      \ process.start()
-    }
+    \ command.start()
     return self
   }
 
@@ -103,9 +50,7 @@ define ChainExec {
       // Command was already skipped due to dependency error.
       return self
     }
-    traverse (run.defaultOrder() -> AsyncRun<#id> process) {
-      \ process.finish()
-    }
+    \ command.finish()
     return self
   }
 
@@ -114,15 +59,12 @@ define ChainExec {
       // Command was already skipped due to dependency error.
       return true
     }
-    complete <- true
-    traverse (run.defaultOrder() -> AsyncRun<#id> process) {
-      // Order matters here, due to short-circuiting.
-      complete <- process.tryFinish() && complete
-    }
+    return command.tryFinish()
   }
 
   collect (collector) {
-    \ self `collector.include` blocking
+    locked <- true
+    \ self `collector.include` deps
   }
 
   get () {
@@ -137,7 +79,7 @@ define ChainExec {
       }
     }
     if (! `present` result) {
-      result <- exec.get()
+      result <- command.get()
     }
     return `require` result
   }
