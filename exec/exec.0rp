@@ -28,3 +28,17 @@ concrete CommandBuilder {
   @value setStdout (Int)       -> (#self)
   @value setStderr (Int)       -> (#self)
 }
+
+concrete FileDescriptor {
+  immutable
+
+  @type new (Int) -> (FileDescriptor)
+  @value get () -> (Int)
+}
+
+concrete Files {
+  @type pipe () -> (FileDescriptor,FileDescriptor)
+  @type close (FileDescriptor) -> ()
+  @type closeExec (FileDescriptor,Bool) -> (FileDescriptor)
+  @type blocking (FileDescriptor,Bool) -> (FileDescriptor)
+}

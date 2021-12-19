@@ -17,5 +17,9 @@ extra_files: [
     source: "exec/src/Extension_Command.cpp"
     categories: [Command]
   }
+  category_source {
+    source: "exec/src/Extension_Files.cpp"
+    categories: [Files]
+  }
 ]
 mode: incremental {}

@@ -126,3 +126,10 @@ define CommandBuilder {
     return Command.new(command,args,stdin,stdout,stderr)
   }
 }
+
+define FileDescriptor {
+  @value Int fd
+
+  new (fd) { return FileDescriptor{ fd } }
+  get () { return fd }
+}
