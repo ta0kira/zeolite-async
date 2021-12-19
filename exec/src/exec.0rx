@@ -205,7 +205,7 @@ define AggregateCommand {
       ErrorOr<Int> result2 <- ErrorOr:value(0)
       traverse (commands.defaultOrder() -> AsyncValue<ErrorOr<Int>> node) {
         ErrorOr<Int> value <- node.get()
-        if (value.isError() || value.getValue() != 1) {
+        if (value.isError() || value.getValue() != 0) {
           result2 <- value
           break
         }

@@ -224,7 +224,7 @@ unittest test {
 }
 
 
-testcase "CommandPipe tests" {
+testcase "CommandPipe success" {
   success
   require stdout "exec\.0rp"
   require stdout "src"
@@ -237,4 +237,18 @@ unittest test {
   CommandBuilder grep <- CommandBuilder.for("/bin/egrep").addArg("-v").addArg("test")
   [AsyncTask&AsyncValue<ErrorOr<Int>>] command <- CommandPipe.begin(ls).pipeStdout(grep).build()
   \ UtilTesting.checkSuccess(command.start().finish().get(),0)
+}
+
+
+testcase "CommandPipe error" {
+  success
+  require stderr "/path/to/missing"
+  timeout 5
+}
+
+unittest test {
+  CommandBuilder ls   <- CommandBuilder.for("/bin/ls").addArg("/path/to/missing")
+  CommandBuilder grep <- CommandBuilder.for("/bin/egrep").addArg("-v").addArg("test")
+  [AsyncTask&AsyncValue<ErrorOr<Int>>] command <- CommandPipe.begin(ls).pipeStdout(grep).build()
+  \ UtilTesting.checkSuccessBetween(command.start().finish().get(),1,255)
 }
