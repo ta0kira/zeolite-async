@@ -29,7 +29,7 @@ concrete Command {
   refines AsyncTask
   refines AsyncValue<ErrorOr<Int>>
 
-  @type new (String,ReadAt<String>,String,String,String) -> (Command)
+  @type new (String,ReadAt<String>,Int,Int,Int) -> (Command)
   @value runOnce () -> (ErrorOr<Int>)
 }
 
@@ -40,7 +40,7 @@ concrete CommandBuilder {
   @type for (String) -> (CommandBuilder)
 
   @value addArg    (Formatted) -> (#self)
-  @value setStdin  (String)    -> (#self)
-  @value setStdout (String)    -> (#self)
-  @value setStderr (String)    -> (#self)
+  @value setStdin  (Int)       -> (#self)
+  @value setStdout (Int)       -> (#self)
+  @value setStderr (Int)       -> (#self)
 }

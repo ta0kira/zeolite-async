@@ -148,12 +148,12 @@ define CommandBuilder {
 
   @value String command
   @value [ReadAt<String>&Append<String>] args
-  @value String stdin
-  @value String stdout
-  @value String stderr
+  @value Int stdin
+  @value Int stdout
+  @value Int stderr
 
   for (command) {
-    return CommandBuilder{ command, Vector<String>.new(), "", "", "" }
+    return CommandBuilder{ command, Vector<String>.new(), -1, -1, -1 }
   }
 
   append (arg) {

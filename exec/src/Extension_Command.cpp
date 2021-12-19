@@ -40,9 +40,9 @@ struct ExtValue_Command : public Value_Command {
   inline ExtValue_Command(S<const Type_Command> p, const ParamsArgs& params_args)
     : Value_Command(std::move(p)),
       // command_ filled below using args 0 and 1.
-      stdin_(params_args.GetArg(2).AsString()),
-      stdout_(params_args.GetArg(3).AsString()),
-      stderr_(params_args.GetArg(4).AsString()) {
+      stdin_(params_args.GetArg(2).AsInt()),
+      stdout_(params_args.GetArg(3).AsInt()),
+      stderr_(params_args.GetArg(4).AsInt()) {
     command_.push_back(params_args.GetArg(0).AsString());
     const BoxedValue& args = params_args.GetArg(1);
     const PrimInt count = TypeValue::Call(args, Function_Container_size, PassParamsArgs()).At(0).AsInt();
@@ -115,46 +115,34 @@ struct ExtValue_Command : public Value_Command {
   }
 
   void SetStdin() const {
-    if (!stdin_.empty()) {
-      const int stdin2 = open(stdin_.c_str(), O_RDONLY);
-      if (stdin2 < 0) {
-        std::cerr << "Failed to open " << stdin_ << ": " << strerror(errno) << std::endl;
-        _exit(1);
-      } else if (dup2(stdin2, STDIN_FILENO) < 1) {
+    if (stdin_ >= 0 && stdin_ != STDIN_FILENO) {
+      if (dup2(stdin_, STDIN_FILENO) < 0) {
         std::cerr << "Failed to set stdin: " << strerror(errno) << std::endl;
         _exit(1);
       } else {
-        close(stdin2);
+        close(stdin_);
       }
     }
   }
 
   void SetStdout() const {
-    if (!stdout_.empty()) {
-      const int stdout2 = open(stdout_.c_str(), O_WRONLY);
-      if (stdout2 < 0) {
-        std::cerr << "Failed to open " << stdout_ << ": " << strerror(errno) << std::endl;
-        _exit(1);
-      } else if (dup2(stdout2, STDOUT_FILENO) < 1) {
+    if (stdout_ >= 0 && stdout_ != STDOUT_FILENO) {
+      if (dup2(stdout_, STDOUT_FILENO) < 0) {
         std::cerr << "Failed to set stdout: " << strerror(errno) << std::endl;
         _exit(1);
       } else {
-        close(stdout2);
+        close(stdout_);
       }
     }
   }
 
   void SetStderr() const {
-    if (!stderr_.empty()) {
-      const int stderr2 = open(stderr_.c_str(), O_WRONLY);
-      if (stderr2 < 0) {
-        std::cerr << "Failed to open " << stderr_ << ": " << strerror(errno) << std::endl;
-        _exit(1);
-      } else if (dup2(stderr2, STDERR_FILENO) < 1) {
+    if (stderr_ >= 0 && stderr_ != STDERR_FILENO) {
+      if (dup2(stderr_, STDERR_FILENO) < 0) {
         std::cerr << "Failed to set stderr: " << strerror(errno) << std::endl;
         _exit(1);
       } else {
-        close(stderr2);
+        close(stderr_);
       }
     }
   }
@@ -193,9 +181,9 @@ struct ExtValue_Command : public Value_Command {
   std::string error_;
   pid_t process_ = 0;
   std::vector<PrimString> command_;
-  const PrimString stdin_;
-  const PrimString stdout_;
-  const PrimString stderr_;
+  const PrimInt stdin_;
+  const PrimInt stdout_;
+  const PrimInt stderr_;
 };
 
 Category_Command& CreateCategory_Command() {
