@@ -1,9 +1,8 @@
 concrete InlineRunner<#id> {
   refines TaskRunner<#id>
 
-  // Args:
-  // - Int: Max concurrent tasks, 0 for unlimited.
-  @type new (Int) -> (#self)
+  @type unlimited () -> (#self)
+  @type limit (Int) -> (#self)
 }
 
 concrete Compute<#id> {

@@ -12,5 +12,5 @@ unittest test {
 
   Int expected <- 1000 + 5*4*3*2 + 'A'.asInt() + 3*2
 
-  \ Testing.checkEquals(node `Compute:with` InlineRunner<AsyncId>.new(0),expected)
+  \ Testing.checkEquals(node `Compute:with` InlineRunner<AsyncId>.unlimited(),expected)
 }

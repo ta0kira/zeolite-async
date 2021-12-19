@@ -37,7 +37,7 @@ define TestProgram {
     ChainExec<AsyncId> exec5 <- constructCall(0.1,"exec5",0).after(exec2)
     ChainExec<AsyncId> exec6 <- constructCall(0.1,"exec6",0).after(exec1).after(exec4).after(exec5)
 
-    ErrorOr<Int> status <- exec6 `Compute:with` InlineRunner<AsyncId>.new(2)
+    ErrorOr<Int> status <- exec6 `Compute:with` InlineRunner<AsyncId>.limit(2)
 
     \ BasicOutput.stderr()
         .write(status.getValue())

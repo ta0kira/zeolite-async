@@ -3,7 +3,11 @@ define InlineRunner {
 
   @value Int max
 
-  new (max) {
+  unlimited () {
+    return #self{ -1 }
+  }
+
+  limit (max) {
     return #self{ max }
   }
 
