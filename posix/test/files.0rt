@@ -1,0 +1,51 @@
+testcase "FileDescriptor bad descriptor" {
+  crash
+  require "5555"
+}
+
+unittest test {
+  \ FileDescriptor.new(5555)
+}
+
+
+testcase "set non-blocking" {
+  success
+  exclude "command\.0rp"
+}
+
+unittest test {
+  CommandBuilder ls   <- CommandBuilder.for("/bin/ls").addArg($ExprLookup[MODULE_PATH]$)
+  CommandBuilder grep <- CommandBuilder.for("/bin/egrep").addArg("-v").addArg("test")
+  FileDescriptor read, FileDescriptor write <- Files.pipe()
+  \ ls.setStdout(write)
+  \ grep.setStdin(read `Files.blocking` false)
+  Command lsCommand   <- ls.build()
+  Command grepCommand <- grep.build()
+  // grep should exit because its stdin is non-blocking and there isn't input yet.
+  \ grepCommand.start()
+  \ Realtime.sleepSeconds(0.1)
+  \ lsCommand.start().finish()
+  \ grepCommand.finish()
+}
+
+
+testcase "set blocking" {
+  success
+  require stdout "command\.0rp"
+  require stdout "src"
+  exclude stdout "test"
+}
+
+unittest test {
+  CommandBuilder ls   <- CommandBuilder.for("/bin/ls").addArg($ExprLookup[MODULE_PATH]$)
+  CommandBuilder grep <- CommandBuilder.for("/bin/egrep").addArg("-v").addArg("test")
+  FileDescriptor read, FileDescriptor write <- Files.pipe()
+  \ ls.setStdout(write)
+  \ grep.setStdin(read)
+  Command lsCommand   <- ls.build()
+  Command grepCommand <- grep.build()
+  \ grepCommand.start()
+  \ Realtime.sleepSeconds(0.1)
+  \ lsCommand.start().finish()
+  \ grepCommand.finish()
+}

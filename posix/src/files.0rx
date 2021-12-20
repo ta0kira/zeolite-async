@@ -1,0 +1,23 @@
+define FileDescriptor {
+  @value Int fd
+
+  new (fd) {
+    scoped {
+      ErrorOr<FileDescriptor> descriptor <- Files.validate(FileDescriptor{ fd })
+    } in if (descriptor.isError()) {
+      fail(String.builder()
+          .append("File descriptor ")
+          .append(fd)
+          .append(" is invalid: ")
+          .append(descriptor.getError())
+          .build())
+    } else {
+      return descriptor.getValue()
+    }
+  }
+
+  stdin () { return new(0) }
+  stdout () { return new(1) }
+  stderr () { return new(2) }
+  get () { return fd }
+}

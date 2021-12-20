@@ -85,79 +85,6 @@ define ChainExec {
   }
 }
 
-define CommandBuilder {
-  $ReadOnly[command,args]$
-
-  @value String command
-  @value [ReadAt<String>&Append<String>] args
-  @value optional FileDescriptor stdin
-  @value optional FileDescriptor stdout
-  @value optional FileDescriptor stderr
-
-  for (command) {
-    return CommandBuilder{ command, Vector<String>.new(), empty, empty, empty }
-  }
-
-  append (arg) {
-    return addArg(arg)
-  }
-
-  addArg (arg) {
-    \ args.append(arg.formatted())
-    return self
-  }
-
-  setStdin (stdin2) {
-    stdin <- stdin2
-    return self
-  }
-
-  setStdout (stdout2) {
-    stdout <- stdout2
-    return self
-  }
-
-  setStderr (stderr2) {
-    stderr <- stderr2
-    return self
-  }
-
-  build () {
-    return Command.new(command,args,stdin,stdout,stderr)
-  }
-}
-
-define FileDescriptor {
-  @value Int fd
-
-  new (fd) {
-    scoped {
-      ErrorOr<FileDescriptor> descriptor <- Files.validate(FileDescriptor{ fd })
-    } in if (descriptor.isError()) {
-      fail(String.builder()
-          .append("File descriptor ")
-          .append(fd)
-          .append(" is invalid: ")
-          .append(descriptor.getError())
-          .build())
-    } else {
-      return descriptor.getValue()
-    }
-  }
-
-  stdin () { return new(0) }
-  stdout () { return new(1) }
-  stderr () { return new(2) }
-  get () { return fd }
-}
-
-concrete AggregateCommand {
-  refines AsyncTask
-  refines AsyncValue<ErrorOr<Int>>
-
-  @type new (DefaultOrder<[AsyncTask&AsyncValue<ErrorOr<Int>>]>) -> (#self)
-}
-
 define AggregateCommand {
   $ReadOnlyExcept[result]$
 
@@ -213,42 +140,5 @@ define AggregateCommand {
       result <- result2
     }
     return `require` result
-  }
-}
-
-define CommandPipe {
-  @value Vector<CommandBuilder> builders
-  @value CommandBuilder lastBuilder
-
-  begin (builder) {
-    return #self{
-        Vector<CommandBuilder>.new().append(builder),
-        builder }
-  }
-
-  pipeStdout (builder) {
-    \ builders.append(builder)
-    FileDescriptor read, FileDescriptor write <- Files.pipe()
-    \ `lastBuilder.setStdout` write
-    \ `builder.setStdin`      read
-    lastBuilder <- builder
-    return self
-  }
-
-  pipeStderr (builder) {
-    \ builders.append(builder)
-    FileDescriptor read, FileDescriptor write <- Files.pipe()
-    \ `lastBuilder.setStderr` write
-    \ `builder.setStdin`      read
-    lastBuilder <- builder
-    return self
-  }
-
-  build () {
-    Vector<Command> commands <- Vector<Command>.new()
-    traverse (builders.defaultOrder() -> CommandBuilder builder) {
-      \ commands.append(builder.build())
-    }
-    return AggregateCommand.new(commands)
   }
 }

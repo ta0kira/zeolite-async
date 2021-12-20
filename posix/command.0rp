@@ -1,14 +1,3 @@
-concrete ChainExec<#id> {
-  refines AsyncNode<#id>
-  refines AsyncValue<ErrorOr<Int>>
-
-  @category asyncRun<#id>
-    #id defines UniqueId
-  ([AsyncTask&AsyncValue<ErrorOr<Int>>]) -> (ChainExec<#id>)
-
-  @value after ([AsyncNode<#id>&AsyncValue<ErrorOr<Int>>]) -> (#self)
-}
-
 concrete Command {
   refines AsyncTask
   refines AsyncValue<ErrorOr<Int>>
@@ -40,24 +29,6 @@ concrete CommandBuilder {
   @value setStdin  (optional FileDescriptor) -> (#self)
   @value setStdout (optional FileDescriptor) -> (#self)
   @value setStderr (optional FileDescriptor) -> (#self)
-}
-
-concrete FileDescriptor {
-  immutable
-
-  @type new (Int) -> (FileDescriptor)
-  @type stdin () -> (FileDescriptor)
-  @type stdout () -> (FileDescriptor)
-  @type stderr () -> (FileDescriptor)
-  @value get () -> (Int)
-}
-
-concrete Files {
-  @type pipe () -> (FileDescriptor,FileDescriptor)
-  @type close (FileDescriptor) -> ()
-  @type closeExec (FileDescriptor,Bool) -> (FileDescriptor)
-  @type blocking (FileDescriptor,Bool) -> (FileDescriptor)
-  @type validate (FileDescriptor) -> (ErrorOr<FileDescriptor>)
 }
 
 concrete CommandPipe {

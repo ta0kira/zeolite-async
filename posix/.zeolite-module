@@ -1,8 +1,8 @@
 root: ".."
-path: "exec"
+path: "posix"
 extra_paths: [
-  "exec/src"
-  "exec/test"
+  "posix/src"
+  "posix/test"
 ]
 public_deps: [
   "../async"
@@ -15,11 +15,11 @@ private_deps: [
 ]
 extra_files: [
   category_source {
-    source: "exec/src/Extension_Command.cpp"
+    source: "posix/src/Extension_Command.cpp"
     categories: [Command]
   }
   category_source {
-    source: "exec/src/Extension_Files.cpp"
+    source: "posix/src/Extension_Files.cpp"
     categories: [Files]
   }
 ]

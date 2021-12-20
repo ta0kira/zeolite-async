@@ -1,0 +1,17 @@
+concrete ChainExec<#id> {
+  refines AsyncNode<#id>
+  refines AsyncValue<ErrorOr<Int>>
+
+  @category asyncRun<#id>
+    #id defines UniqueId
+  ([AsyncTask&AsyncValue<ErrorOr<Int>>]) -> (ChainExec<#id>)
+
+  @value after ([AsyncNode<#id>&AsyncValue<ErrorOr<Int>>]) -> (#self)
+}
+
+concrete AggregateCommand {
+  refines AsyncTask
+  refines AsyncValue<ErrorOr<Int>>
+
+  @type new (DefaultOrder<[AsyncTask&AsyncValue<ErrorOr<Int>>]>) -> (#self)
+}

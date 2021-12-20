@@ -2,7 +2,7 @@ root: ".."
 path: "working"
 private_deps: [
   "../async"
-  "../exec"
+  "../posix"
   "../topo"
   "lib/container"
   "lib/math"
