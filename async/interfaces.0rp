@@ -40,13 +40,3 @@
 @type interface UniqueId {
   newId () -> (#self)
 }
-
-// Call AsyncId.newId() for a new value.
-concrete AsyncId {
-  immutable
-  defines Equals<AsyncId>
-  defines LessThan<AsyncId>
-  defines UniqueId
-  refines Formatted
-  refines Hashed
-}
