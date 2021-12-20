@@ -184,7 +184,7 @@ unittest test {
 
 testcase "CommandPipe success" {
   success
-  require stdout "exec\.0rp"
+  require stdout "command\.0rp"
   require stdout "src"
   exclude stdout "test"
   timeout 5
