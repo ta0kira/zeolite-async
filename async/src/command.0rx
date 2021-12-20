@@ -1,4 +1,4 @@
-define ChainExec {
+define ChainCommand {
   $ReadOnlyExcept[result,locked]$
 
   refines AsyncRun<#id>
@@ -11,7 +11,7 @@ define ChainExec {
   @value Bool locked
 
   asyncRun (command) {
-    return ChainExec<#id>{
+    return ChainCommand<#id>{
         empty,
         #id.newId(),
         command,

@@ -19,9 +19,9 @@ define TestProgram {
     }
   }
 
-  @type constructCall (Float,String,Int) -> (ChainExec<AsyncId>)
+  @type constructCall (Float,String,Int) -> (ChainCommand<AsyncId>)
   constructCall (delay,message,status) {
-    return `ChainExec:asyncRun<AsyncId>` CommandBuilder.for(testProgram)
+    return `ChainCommand:asyncRun<AsyncId>` CommandBuilder.for(testProgram)
       .addArg(delay)
       .addArg(message)
       .addArg(status)
@@ -30,12 +30,12 @@ define TestProgram {
 
   @type runAsyncTest () -> ()
   runAsyncTest () {
-    ChainExec<AsyncId> exec1 <- constructCall(0.1,"exec1",0)
-    ChainExec<AsyncId> exec2 <- constructCall(0.1,"exec2",0)
-    ChainExec<AsyncId> exec3 <- constructCall(0.1,"exec3",0)
-    ChainExec<AsyncId> exec4 <- constructCall(0.1,"exec4",0).after(exec2).after(exec3)
-    ChainExec<AsyncId> exec5 <- constructCall(0.1,"exec5",0).after(exec2)
-    ChainExec<AsyncId> exec6 <- constructCall(0.1,"exec6",0).after(exec1).after(exec4).after(exec5)
+    ChainCommand<AsyncId> exec1 <- constructCall(0.1,"exec1",0)
+    ChainCommand<AsyncId> exec2 <- constructCall(0.1,"exec2",0)
+    ChainCommand<AsyncId> exec3 <- constructCall(0.1,"exec3",0)
+    ChainCommand<AsyncId> exec4 <- constructCall(0.1,"exec4",0).after(exec2).after(exec3)
+    ChainCommand<AsyncId> exec5 <- constructCall(0.1,"exec5",0).after(exec2)
+    ChainCommand<AsyncId> exec6 <- constructCall(0.1,"exec6",0).after(exec1).after(exec4).after(exec5)
 
     ErrorOr<Int> status <- exec6 `Compute:with` InlineRunner<AsyncId>.limit(2)
 
