@@ -1,41 +1,119 @@
+// A globally-unique identifier.
+@type interface UniqueId {
+  // Get a new globally-unique identifier.
+  newId () -> (#self)
+}
+
+// Node in an async computation graph.
 @value interface AsyncNode<|#id> {
+  // Collect all AsyncRun contained by the node, if any.
   collect (AsyncCollector<#id>) -> ()
 }
 
+// Task with asynchronous execution.
 @value interface AsyncTask {
+  // Start the task.
+  //
+  // Notes:
+  // - If the task needs to execute in the calling thread, perform that
+  //   execution before returning.
+  // - If the task doesn't need to execute in the calling thread (e.g., it sends
+  //   a remote request), initiate the operation here.
+  // - This should be idempotent.
   start () -> (#self)
+
+  // Block until the task started by start() is finished.
+  //
+  // Notes:
+  // - This should not be called before start() returns.
+  // - This should be idempotent.
   finish () -> (#self)
+
+  // Determine if the task started by start() has finished, without blocking.
+  //
+  // Returns:
+  // - Bool: true iff the task is finished.
+  //
+  // Notes:
+  // - Once this returns true for the first time, subsequent calls should be
+  //   idempotent, and calls to finish() should not block.
   tryFinish () -> (Bool)
 }
 
+// Task within a computation graph.
 @value interface AsyncRun<|#id> {
   refines AsyncTask
 
+  // Get the globally-unique task ID.
   getId () -> (#id)
 }
 
+// Collects tasks in a computation graph.
 @value interface AsyncCollector<#id|> {
+  // Include the task with the specified dependencies.
+  //
+  // Args:
+  // - AsyncRun<#id>: The task to execute.
+  // - DefaultOrder<AsyncNode<#id>>: The nodes that the task depends on.
   include (AsyncRun<#id>,DefaultOrder<AsyncNode<#id>>) -> (#self)
 }
 
+// Value that is computed asynchronously.
+//
+// Notes:
+// - This will generally be used in conjunction with AsyncNode or AsyncTask. In
+//   such cases, the task should be started and finished before calling get().
 @value interface AsyncValue<|#x> {
+  // Get the computed value.
   get () -> (#x)
 }
 
+// Queue of async tasks in a computation graph.
 @value interface TaskQueue<#id> {
+  // Returns true iff no more tasks remain.
+  //
+  // Notes:
+  // - Once this returns true, it should never return false, and nextTask and
+  //   nextWait should return empty.
   isComplete () -> (Bool)
+
+  // Get the next available unstarted task.
+  //
   // Args:
   // - Int: Max concurrent tasks, 0 for unlimited.
+  //
+  // Returns:
+  // - optional AsyncRun<#id>: Task to execute, if available.
+  //
+  // Notes:
+  // - An empty return does not mean that the queue is empty; it could just mean
+  //   that the remaining tasks are blocked by others that are still pending.
   nextTask (Int) -> (optional AsyncRun<#id>)
+
+  // Get the next available task in progress.
+  //
+  // Returns:
+  // - optional AsyncRun<#id>: Task to execute, if available.
   nextWait () -> (optional AsyncRun<#id>)
+
+  // Mark the task as finished.
+  //
+  // Notes:
+  // - Only pass a task after finish() returns or tryFinish() has returned true.
+  // - Only pass tasks that were originally taken from nextTask from this queue.
   finishTask (AsyncRun<#id>) -> (Bool)
+
+  // Mark the task as in progress.
+  //
+  // Notes:
+  // - Only pass a task if tryFinish() returns false.
+  // - Only pass tasks that were originally taken from nextTask or nextWait from
+  //   this queue.
   queueWait (AsyncRun<#id>) -> ()
 }
 
+// Runs tasks from a TaskQueue.
 @value interface TaskRunner<#id> {
+  // Iteratively run tasks until isComplete() returns true.
   runAll (TaskQueue<#id>) -> ()
-}
-
-@type interface UniqueId {
-  newId () -> (#self)
 }
