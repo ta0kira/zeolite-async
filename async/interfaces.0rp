@@ -9,7 +9,6 @@
 }
 
 @value interface AsyncRun<|#id> {
-  refines AsyncNode<#id>
   refines AsyncTask
 
   getId () -> (#id)
