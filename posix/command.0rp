@@ -2,33 +2,25 @@ concrete Command {
   refines AsyncTask
   refines AsyncValue<ErrorOr<Int>>
 
-  // NOTE: If the descriptor is non-empty and not stdin, stdout, or stderr, then
-  // it will be closed upon start().
-  @type new (String,
-             ReadAt<String>,
-             optional FileDescriptor,
-             optional FileDescriptor,
-             optional FileDescriptor) ->
-            (Command)
+  @type buildFor (String) -> (CommandBuilder)
 
   @value runOnce () -> (ErrorOr<Int>)
   @value runDetached () -> (ErrorOr<Int>)
 }
 
-concrete CommandBuilder {
+@value interface CommandBuilder {
+  // NOTE: Calling build() invalidates the builder.
   refines Build<Command>
   refines Append<Formatted>
 
-  @type for (String) -> (CommandBuilder)
-
-  @value addArg (Formatted) -> (#self)
+  addArg (Formatted) -> (#self)
 
   // NOTE: If the descriptor is non-empty and not stdin, stdout, or stderr, then
   // it will be closed upon start().
 
-  @value setStdin  (optional FileDescriptor) -> (#self)
-  @value setStdout (optional FileDescriptor) -> (#self)
-  @value setStderr (optional FileDescriptor) -> (#self)
+  setStdin  (optional FileDescriptor) -> (#self)
+  setStdout (optional FileDescriptor) -> (#self)
+  setStderr (optional FileDescriptor) -> (#self)
 }
 
 concrete CommandPipe {

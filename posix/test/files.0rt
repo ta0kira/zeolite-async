@@ -14,8 +14,8 @@ testcase "set non-blocking" {
 }
 
 unittest test {
-  CommandBuilder ls   <- CommandBuilder.for("/bin/ls").addArg($ExprLookup[MODULE_PATH]$)
-  CommandBuilder grep <- CommandBuilder.for("/bin/egrep").addArg("-v").addArg("test")
+  CommandBuilder ls   <- Command.buildFor("/bin/ls").addArg($ExprLookup[MODULE_PATH]$)
+  CommandBuilder grep <- Command.buildFor("/bin/egrep").addArg("-v").addArg("test")
   FileDescriptor read, FileDescriptor write <- Files.pipe()
   \ ls.setStdout(write)
   \ grep.setStdin(read `Files.blocking` false)
@@ -37,8 +37,8 @@ testcase "set blocking" {
 }
 
 unittest test {
-  CommandBuilder ls   <- CommandBuilder.for("/bin/ls").addArg($ExprLookup[MODULE_PATH]$)
-  CommandBuilder grep <- CommandBuilder.for("/bin/egrep").addArg("-v").addArg("test")
+  CommandBuilder ls   <- Command.buildFor("/bin/ls").addArg($ExprLookup[MODULE_PATH]$)
+  CommandBuilder grep <- Command.buildFor("/bin/egrep").addArg("-v").addArg("test")
   FileDescriptor read, FileDescriptor write <- Files.pipe()
   \ ls.setStdout(write)
   \ grep.setStdin(read)

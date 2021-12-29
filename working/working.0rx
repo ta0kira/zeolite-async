@@ -21,7 +21,7 @@ define TestProgram {
 
   @type constructCall (Float,String,Int) -> (ChainCommand<AsyncId>)
   constructCall (delay,message,status) {
-    return `ChainCommand:asyncRun<AsyncId>` CommandBuilder.for(testProgram)
+    return `ChainCommand:asyncRun<AsyncId>` Command.buildFor(testProgram)
       .addArg(delay)
       .addArg(message)
       .addArg(status)

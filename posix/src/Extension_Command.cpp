@@ -17,6 +17,7 @@
 #include "Category_Container.hpp"
 #include "Category_ErrorOr.hpp"
 #include "Category_FileDescriptor.hpp"
+#include "Category_Formatted.hpp"
 #include "Category_Int.hpp"
 #include "Category_ReadAt.hpp"
 #include "Category_String.hpp"
@@ -33,8 +34,8 @@ struct ExtCategory_Command : public Category_Command {
 struct ExtType_Command : public Type_Command {
   inline ExtType_Command(Category_Command& p, Params<0>::Type params) : Type_Command(p, params) {}
 
-  ReturnTuple Call_new(const ParamsArgs& params_args) const final {
-    TRACE_FUNCTION("Command.new")
+  ReturnTuple Call_buildFor(const ParamsArgs& params_args) const final {
+    TRACE_FUNCTION("Command.buildFor")
     return ReturnTuple(CreateValue_Command(PARAM_SELF, params_args));
   }
 };
@@ -42,17 +43,7 @@ struct ExtType_Command : public Type_Command {
 struct ExtValue_Command : public Value_Command {
   inline ExtValue_Command(S<const Type_Command> p, const ParamsArgs& params_args)
     : Value_Command(std::move(p)),
-      // Setting command_[0] allows GetFd to set error_ with the command name if necessary.
-      command_{params_args.GetArg(0).AsString()},
-      stdin_(GetFd(params_args.GetArg(2))),
-      stdout_(GetFd(params_args.GetArg(3))),
-      stderr_(GetFd(params_args.GetArg(4))) {
-    const BoxedValue& args = params_args.GetArg(1);
-    const PrimInt count = TypeValue::Call(args, Function_Container_size, PassParamsArgs()).At(0).AsInt();
-    for (int i = 0; i < count; ++i) {
-      command_.push_back(TypeValue::Call(args, Function_ReadAt_readAt, PassParamsArgs(Box_Int(i))).At(0).AsString());
-    }
-  }
+      command_{params_args.GetArg(0).AsString()} {}
 
   ~ExtValue_Command() {
     if (executed_ && process_ > 0 && !finished_) {
@@ -109,10 +100,66 @@ struct ExtValue_Command : public Value_Command {
     return ReturnTuple(Call_get(PassParamsArgs()));
   }
 
+  // CommandBuilder >>>
+
+  ReturnTuple Call_addArg(const ParamsArgs& params_args) final {
+    TRACE_FUNCTION("CommandBuilder.addArg")
+    FailIfBuilt();
+    const PrimString arg = TypeValue::Call(params_args.GetArg(0), Function_Formatted_formatted, PassParamsArgs()).At(0).AsString();
+    command_.push_back(arg);
+    return ReturnTuple(VAR_SELF);
+  }
+
+  ReturnTuple Call_append(const ParamsArgs& params_args) final {
+    TRACE_FUNCTION("CommandBuilder.append")
+    FailIfBuilt();
+    return Call_addArg(params_args);
+  }
+
+  ReturnTuple Call_setStdin(const ParamsArgs& params_args) final {
+    TRACE_FUNCTION("CommandBuilder.setStdin")
+    FailIfBuilt();
+    stdin_ = GetFd(params_args.GetArg(0));
+    return ReturnTuple(VAR_SELF);
+  }
+
+  ReturnTuple Call_setStdout(const ParamsArgs& params_args) final {
+    TRACE_FUNCTION("CommandBuilder.setStdout")
+    FailIfBuilt();
+    stdout_ = GetFd(params_args.GetArg(0));
+    return ReturnTuple(VAR_SELF);
+  }
+
+  ReturnTuple Call_setStderr(const ParamsArgs& params_args) final {
+    TRACE_FUNCTION("CommandBuilder.setStderr")
+    FailIfBuilt();
+    stderr_ = GetFd(params_args.GetArg(0));
+    return ReturnTuple(VAR_SELF);
+  }
+
+  ReturnTuple Call_build(const ParamsArgs& params_args) final {
+    TRACE_FUNCTION("CommandBuilder.build")
+    FailIfBuilt();
+    built_ = true;
+    MaybeDup(stdin_);
+    MaybeDup(stdout_);
+    MaybeDup(stderr_);
+    return ReturnTuple(VAR_SELF);
+  }
+
+  // <<< CommandBuilder
+
+  void FailIfBuilt() {
+    if (built_) {
+      FAIL() << "Command already built with build()";
+    }
+  }
+
   void Start(bool detached) {
     if (executed_) {
       return;
     }
+    executed_ = true;
     process_ = fork();
     if (process_ == 0) {
       // This makes sure that an immediate call to ~ExtValue_Command() in the
@@ -139,7 +186,6 @@ struct ExtValue_Command : public Value_Command {
       CloseFd(stdin_);
       CloseFd(stdout_);
       CloseFd(stderr_);
-      executed_ = true;
     }
     if (process_ < 0) {
       SetError(strerror(errno));
@@ -221,33 +267,37 @@ struct ExtValue_Command : public Value_Command {
       fd = TypeValue::Call(BoxedValue::Require(descriptor),
                            Function_FileDescriptor_get,
                            PassParamsArgs()).At(0).AsInt();
-      if (fd >= 0 && fd <= 2) {
-        // This prevents latent issues if stdout or stderr is redirected to the
-        // other, and then also replaced.
-        fd = dup(fd);
-        if (fd < 0) {
-          // This might happen if the parent process is out of file descriptors.
-          executed_ = true;
-          finished_ = true;
-          SetError(strerror(errno));
-        }
-      }
-      if (fd > 2) {
-        fcntl(fd, F_SETFD, fcntl(fd, F_GETFD) | FD_CLOEXEC);
-      }
     }
     return fd;
   }
 
+  void MaybeDup(int& fd) {
+    if (fd >= 0 && fd <= 2) {
+      // This prevents latent issues if stdout or stderr is redirected to the
+      // other, and then also replaced.
+      fd = dup(fd);
+      if (fd < 0) {
+        // This might happen if the parent process is out of file descriptors.
+        executed_ = true;
+        finished_ = true;
+        SetError(strerror(errno));
+      }
+    }
+    if (fd > 2) {
+      fcntl(fd, F_SETFD, fcntl(fd, F_GETFD) | FD_CLOEXEC);
+    }
+  }
+
+  bool built_ = false;
   bool executed_ = false;
   bool finished_ = false;
   int status_ = 0;
   std::string error_;
   pid_t process_ = 0;
   std::vector<PrimString> command_;
-  const int stdin_;
-  const int stdout_;
-  const int stderr_;
+  int stdin_ = -1;
+  int stdout_ = -1;
+  int stderr_ = -1;
 };
 
 Category_Command& CreateCategory_Command() {

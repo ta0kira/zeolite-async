@@ -23,4 +23,10 @@ extra_files: [
     categories: [Files]
   }
 ]
+extension_specs: [
+  category {
+    name: Command
+    refines: [CommandBuilder]
+  }
+]
 mode: incremental {}
