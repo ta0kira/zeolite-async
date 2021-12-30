@@ -43,6 +43,9 @@ struct ExtType_Command : public Type_Command {
 struct ExtValue_Command : public Value_Command {
   inline ExtValue_Command(S<const Type_Command> p, const ParamsArgs& params_args)
     : Value_Command(std::move(p)),
+      built_{false},
+      executed_{false},
+      finished_{false},
       command_{params_args.GetArg(0).AsString()} {}
 
   ~ExtValue_Command() {
@@ -288,17 +291,17 @@ struct ExtValue_Command : public Value_Command {
     }
   }
 
-  bool built_ = false;
-  bool executed_ = false;
-  bool finished_ = false;
+  bool built_:1;
+  bool executed_:1;
+  bool finished_:1;
   int status_ = 0;
   std::string error_;
   pid_t process_ = 0;
   std::vector<PrimString> command_;
-  int stdin_ = -1;
+  int stdin_  = -1;
   int stdout_ = -1;
   int stderr_ = -1;
-};
+} __attribute__((packed));
 
 Category_Command& CreateCategory_Command() {
   static auto& category = *new ExtCategory_Command();
