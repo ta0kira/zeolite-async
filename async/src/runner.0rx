@@ -183,16 +183,18 @@ define CollectGraph {
   $ReadOnlyExcept[currentBlocking]$
 
   @value optional HashedSet<#id> currentBlocking
-  @value HashedMap<#id,AsyncRun<#id>> idToNode
+  @value HashedMap<#id,AsyncRun<#id>>  idToNode
   @value HashedMap<#id,HashedSet<#id>> depends
   @value HashedMap<#id,HashedSet<#id>> blocking
+  @value Queue<AsyncRun<#id>>          taskQueue
 
   new () {
     return #self{
         empty,
         HashedMap<#id,AsyncRun<#id>>.new(),
         HashedMap<#id,HashedSet<#id>>.new(),
-        HashedMap<#id,HashedSet<#id>>.new() }
+        HashedMap<#id,HashedSet<#id>>.new(),
+        SimpleQueue<AsyncRun<#id>>.new() }
   }
 
   idToNode () {
@@ -205,6 +207,10 @@ define CollectGraph {
 
   blocking () {
     return blocking
+  }
+
+  taskQueue () {
+    return taskQueue
   }
 
   include (node,blockers) {
@@ -233,18 +239,11 @@ define CollectGraph {
       traverse (newBlocking.defaultOrder() -> #id id2) {
         \ require(blocking.get(id2)).add(id)
       }
-    }
-    return self
-  }
-
-  taskQueue () {
-    SimpleQueue<AsyncRun<#id>> queue <- SimpleQueue<AsyncRun<#id>>.new()
-    traverse (depends.defaultOrder() -> KeyValue<#id,Container> keyValue) {
-      if (keyValue.getValue().size() == 0) {
-        \ queue.push(`require` `idToNode.get` keyValue.getKey())
+      if (newBlocking.size() == 0) {
+        \ taskQueue.push(node)
       }
     }
-    return queue
+    return self
   }
 
   @value swapBlocking (optional HashedSet<#id>) -> (optional HashedSet<#id>)
