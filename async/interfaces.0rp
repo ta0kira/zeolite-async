@@ -101,6 +101,7 @@
   // Notes:
   // - Only pass a task after finish() returns or tryFinish() has returned true.
   // - Only pass tasks that were originally taken from nextTask from this queue.
+  // - Returns true iff finishing the passed task unblocked another task.
   finishTask (AsyncRun<#id>) -> (Bool)
 
   // Mark the task as in progress.

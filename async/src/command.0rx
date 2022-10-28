@@ -68,7 +68,7 @@ define ChainCommand {
   }
 
   get () {
-    if (!`present` result) {
+    if (! `present` result) {
       traverse (deps.defaultOrder() -> AsyncValue<ErrorOr<Int>> dep) {
         scoped {
           ErrorOr<Int> status <- dep.get()
@@ -123,6 +123,7 @@ define AggregateCommand {
     }
     complete <- true
     traverse (commands.defaultOrder() -> AsyncTask command) {
+      // Order matters here, due to short-circuiting.
       complete <- command.tryFinish() && complete
     }
   }

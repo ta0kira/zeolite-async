@@ -229,11 +229,10 @@ define CollectGraph {
       scoped {
         optional HashedSet<#id> oldBlocking <- swapBlocking(newBlocking)
         $Hidden[newBlocking]$
-      } in {
-        traverse (blockers.defaultOrder() -> AsyncNode<#id> blocker) {
-          \ blocker.collect(self)
-        }
+      } cleanup {
         \ swapBlocking(oldBlocking)
+      } in traverse (blockers.defaultOrder() -> AsyncNode<#id> blocker) {
+        \ blocker.collect(self)
       }
       \ id `depends.set` newBlocking
       traverse (newBlocking.defaultOrder() -> #id id2) {
