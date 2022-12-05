@@ -1,0 +1,86 @@
+define GraphTree {
+  @value ReadAt<#n> roots
+  @value DefaultOrder<GraphTree<#n>> subgraphs
+
+  new (roots,subgraphs) {
+    return #self{
+        roots.defaultOrder() `OrderH:copyTo`  Vector<#n>.new(),
+        subgraphs.defaultOrder() `OrderH:copyTo`  Vector<GraphTree<#n>>.new() }
+  }
+
+  newRandomizer () {
+    scoped {
+      Vector<GraphRandomizer<#n>> subgraphs2 <- Vector<GraphRandomizer<#n>>.new()
+      traverse (subgraphs.defaultOrder() -> GraphTree<#n> graph) {
+        \ subgraphs2.append(graph.newRandomizer())
+      }
+    } in return GraphTreeRandomizer<#n>.new(roots,subgraphs2)
+  }
+}
+
+concrete GraphTreeRandomizer<#n> {
+  @type new (ReadAt<#n>,ReadAt<GraphRandomizer<#n>>) -> (GraphRandomizer<#n>)
+}
+
+define GraphTreeRandomizer {
+  refines GraphRandomizer<#n>
+
+  @value ReadAt<#n> roots
+  @value CategoricalTree<Int> randomizeRoots
+  @value ReadAt<GraphRandomizer<#n>> subgraphs
+  @value CategoricalTree<Int> randomizeSubgraphs
+
+  new (roots,subgraphs) {
+    return #self{ roots, initRoots(roots), subgraphs, initSubgraphs(subgraphs) }
+  }
+
+  size () {
+    return randomizeRoots.getTotal()+randomizeSubgraphs.getTotal()
+  }
+
+  nextNode (random) {
+    if (randomizeRoots.getTotal() > 0) {
+      $Hidden[subgraphs,randomizeSubgraphs]$
+      scoped {
+        Int index <- randomizeRoots.locate((randomizeRoots.getTotal().asFloat()*random.generate()).asInt())
+      } in {
+        \ `randomizeRoots.decrWeight` index
+        return roots.readAt(index)
+      }
+    } else {
+      $Hidden[roots,randomizeRoots]$
+      scoped {
+        Int index <- randomizeSubgraphs.locate((randomizeSubgraphs.getTotal().asFloat()*random.generate()).asInt())
+      } in {
+        \ `randomizeSubgraphs.decrWeight` index
+        return subgraphs.readAt(index).nextNode(random)
+      }
+    }
+  }
+
+  @type initRoots (ReadAt<#n>) -> (CategoricalTree<Int>)
+  initRoots (roots) (randomizeRoots) {
+    randomizeRoots <- CategoricalTree<Int>.new()
+    traverse (Counter.zeroIndexed(roots.size()) -> Int index) {
+      \ index `randomizeRoots.setWeight` 1
+    }
+  }
+
+  @type initSubgraphs (ReadAt<GraphRandomizer<#n>>) -> (CategoricalTree<Int>)
+  initSubgraphs (subgraphs) (randomizeSubgraphs) {
+    randomizeSubgraphs <- CategoricalTree<Int>.new()
+    traverse (Counter.zeroIndexed(subgraphs.size()) -> Int index) {
+      \ index `randomizeSubgraphs.setWeight` subgraphs.readAt(index).size()
+    }
+  }
+}
+
+define RandomizeGraph {
+  with (graph,random) {
+    Vector<#n> order <- Vector<#n>.new()
+    while (graph.size() > 0) {
+      \ `order.append` graph.nextNode(random)
+    }
+    return order
+  }
+}

@@ -1,0 +1,13 @@
+@value interface GraphRandomizer<#n> {
+  refines Container
+  nextNode (Generator<Float>) -> (#n)
+}
+
+concrete GraphTree<#n> {
+  @type new (DefaultOrder<#n> /*roots*/,DefaultOrder<GraphTree<#n>> /*subgraphs*/) -> (#self)
+  @value newRandomizer () -> (GraphRandomizer<#n>)
+}
+
+concrete RandomizeGraph {
+  @category with<#n> (GraphRandomizer<#n>,Generator<Float>) -> (DefaultOrder<#n>)
+}

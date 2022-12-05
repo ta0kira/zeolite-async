@@ -1,0 +1,10 @@
+root: ".."
+path: "random"
+extra_paths: [
+  "random/src"
+]
+public_deps: [
+  "lib/container"
+  "lib/math"
+]
+mode: incremental {}

@@ -3,6 +3,7 @@ path: "working"
 private_deps: [
   "../async"
   "../posix"
+  "../random"
   "../topo"
   "lib/container"
   "lib/math"
