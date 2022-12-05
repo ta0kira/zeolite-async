@@ -16,6 +16,16 @@ define GraphTree {
       }
     } in return GraphTreeRandomizer<#n>.new(roots,subgraphs2)
   }
+
+  permCountLog10 () (total) {
+    total <- 0.0
+    traverse (Counter.builder().start(2).limit(roots.size()+1).done() -> Int value) {
+      total <- total+Math.log10(value.asFloat())
+    }
+    traverse (subgraphs.defaultOrder() -> GraphTree<#n> subgraph) {
+      total <- total+subgraph.permCountLog10()
+    }
+  }
 }
 
 concrete GraphTreeRandomizer<#n> {

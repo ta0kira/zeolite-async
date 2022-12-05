@@ -4,7 +4,16 @@
 }
 
 concrete GraphTree<#n> {
+  // Notes:
+  //
+  // - Every root blocks every subgraph.
+  // - No root is blocked by any other node in this graph.
+  // - Every subgraph is connected and is independent of its sibling subgraphs.
   @type new (DefaultOrder<#n> /*roots*/,DefaultOrder<GraphTree<#n>> /*subgraphs*/) -> (#self)
+
+  // Returns log10 of total possible permutations of the graph's nodes.
+  @value permCountLog10 () -> (Float)
+
   @value newRandomizer () -> (GraphRandomizer<#n>)
 }
 
