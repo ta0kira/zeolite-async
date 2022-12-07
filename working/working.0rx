@@ -47,11 +47,11 @@ define TestProgram {
 
   @type runGraphTest () -> ()
   runGraphTest () {
-    TopoSort<TestNode,Int> topoSort, ReadAt<Int> nodes, GraphTraverser<Int> traverser <- defer
+    TopoSort<TestNode,Int> topoSort, ReadAt<Int> nodes, GraphTree<Int> graphTree <- defer
     if (Argv.global().readAt(1) == "small") {
-      topoSort, nodes, traverser <- constructSmall()
+      topoSort, nodes, graphTree <- constructSmall()
     } else {
-      topoSort, nodes, traverser <- `constructLarge` ParseChars.int(Argv.global().readAt(1)).getValue()
+      topoSort, nodes, graphTree <- `constructLarge` ParseChars.int(Argv.global().readAt(1)).getValue()
     }
 
     Int count <- 1000
@@ -68,15 +68,16 @@ define TestProgram {
 //       \ formatNodes(copy)
       scoped {
         optional Int nextId <- empty
+        GraphTraverser<Int> traverser <-graphTree.newTraverser(SelectRandom.with(RandomUniform.probability()))
       } in while (`present` (nextId <- traverser.nextNode())) {
         \ BasicOutput.stdout()
             .write(`require` nextId)
             .write(" ")
             .flush()
-        \ BasicOutput.stdout()
-            .write("\n")
-            .flush()
       }
+      \ BasicOutput.stdout()
+          .write("\n")
+          .flush()
       \ BasicOutput.stderr()
           .write(i)
           .write("\n")
@@ -99,8 +100,8 @@ define TestProgram {
     }
   }
 
-  @type constructSmall () -> (TopoSort<TestNode,Int>,ReadAt<Int>,GraphTraverser<Int>)
-  constructSmall () (topoSort,nodes,traverser) {
+  @type constructSmall () -> (TopoSort<TestNode,Int>,ReadAt<Int>,GraphTree<Int>)
+  constructSmall () (topoSort,nodes,graphTree) {
     TestNode node1 <- TestNode.new(1,Vector<TestNode>.new())
     TestNode node2 <- TestNode.new(2,Vector<TestNode>.new())
     TestNode node3 <- TestNode.new(3,Vector<TestNode>.new()
@@ -137,12 +138,12 @@ define TestProgram {
 
     scoped {
       DefaultOrder<Int> unblocked, KVReader<Int,DefaultOrder<Int>> blockers <-
-          allNodes `ComputeBlockers.with` BlockWithAll<Int>.new()
-    } in traverser <- GraphTree<Int>.new(unblocked,blockers,SelectRandom.with(RandomUniform.probability()))
+          `DualGraph:from` allNodes `ComputeBlockers.with` BlockWithAll<Int>.new()
+    } in graphTree <- GraphTree<Int>.new(unblocked,blockers)
   }
 
-  @type constructLarge (Int) -> (TopoSort<TestNode,Int>,ReadAt<Int>,GraphTraverser<Int>)
-  constructLarge (size) (topoSort,nodes,traverser) {
+  @type constructLarge (Int) -> (TopoSort<TestNode,Int>,ReadAt<Int>,GraphTree<Int>)
+  constructLarge (size) (topoSort,nodes,graphTree) {
     Vector<TestNode> allNodes <- Vector<TestNode>.new()
     traverse (Counter.zeroIndexed(size) -> Int id) {
       \ allNodes.append(TestNode.new(id,allNodes.duplicate()))
@@ -154,8 +155,8 @@ define TestProgram {
 
     scoped {
       DefaultOrder<Int> unblocked, KVReader<Int,DefaultOrder<Int>> blockers <-
-          allNodes `ComputeBlockers.with` BlockWithAll<Int>.new()
-    } in traverser <- GraphTree<Int>.new(unblocked,blockers,SelectRandom.with(RandomUniform.probability()))
+          `DualGraph:from` allNodes `ComputeBlockers.with` BlockWithAll<Int>.new()
+    } in graphTree <- GraphTree<Int>.new(unblocked,blockers)
   }
 
   @type formatNodes (DefaultOrder<TestNode>) -> ()

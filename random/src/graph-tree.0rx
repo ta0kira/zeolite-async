@@ -1,6 +1,31 @@
 define GraphTree {
   $ReadOnlyExcept[]$
 
+  @value DefaultOrder<#id> unblocked
+  @value KVReader<#id,DefaultOrder<#id>> blockers
+
+  new (unblocked,blockers) {
+    return #self{ unblocked, blockers }
+  }
+
+  newTraverser (selector) {
+    return GraphTreeTraverser<#id>.new(unblocked,blockers,selector)
+  }
+}
+
+concrete GraphTreeTraverser<#id> {
+  refines GraphTraverser<#id>
+
+  #id immutable
+  #id requires Hashed
+  #id defines Equals<#id>
+
+  @type new (DefaultOrder<#id>,KVReader<#id,DefaultOrder<#id>>,IndexSelector) -> (#self)
+}
+
+define GraphTreeTraverser {
+  $ReadOnlyExcept[]$
+
   refines GraphTraverser<#id>
 
   @value HashedSet<#id> candidates
@@ -8,7 +33,7 @@ define GraphTree {
   @value KVReader<#id,DefaultOrder<#id>> blockers
   @value IndexSelector selector
 
-  new (unblocked,blockers, selector) {
+  new (unblocked,blockers,selector) {
     return #self{
         HashedSet<#id>.new(),
         HashedMap<#id,Int>.new(),
@@ -42,14 +67,26 @@ define GraphTree {
   @value nextNodeIs (#id) -> (#id)
   nextNodeIs (node) {
     \ candidates.remove(node)
+    HashedSet<#id> stillBlocked <- HashedSet<#id>.new()
     traverse (getBlockers(node) -> #id child) {
       $Hidden[node]$
       Int newCount <- require(refCounts.get(child))-1
+      \ child `refCounts.set` newCount
       if (newCount == 0) {
-        \ `refCounts.remove` child
-        \ unblockNode(child)
+        traverse (getBlockers(child) -> #id childChild) {
+          $Hidden[child]$
+          \ stillBlocked.add(childChild)
+        }
       } else {
-        \ child `refCounts.set` newCount
+        \ stillBlocked.add(child)
+      }
+    }
+    // This covers the case where one child of `node` blocks another.
+    traverse (getBlockers(node) -> #id child) {
+      $Hidden[node]$
+      if (!stillBlocked.member(child)) {
+        \ refCounts.remove(child)
+        \ unblockNode(child)
       }
     }
     return node
@@ -57,6 +94,7 @@ define GraphTree {
 
   @value unblockNode (#id) -> ()
   unblockNode (node) {
+    \ candidates.add(node)
     traverse (getBlockers(node) -> #id child) {
       $Hidden[node]$
       \ incrementRefCount(child)
@@ -132,6 +170,7 @@ define BlockWithAll {
     HashedSet<#id> children <- HashedSet<#id>.new()
     traverse (node.outgoing().defaultOrder() -> GraphNode<#id> child) {
       $Hidden[node]$
+      \ children.add(child.getId())
       scoped {
         optional DefaultOrder<#id> childBlockers <- blockers.get(child.getId())
       } in if (`present` childBlockers) {
@@ -190,5 +229,48 @@ define ComputeBlockers {
         \ unblocked.append(node)
       }
     }
+  }
+}
+
+define DualGraph {
+  $ReadOnlyExcept[]$
+
+  refines GraphNode<#id>
+
+  @value #id id
+  @value Vector<DualGraph<#id>> outgoing
+
+  getId () {
+    return id
+  }
+
+  outgoing () {
+    return outgoing
+  }
+
+  from (nodes) {
+    HashedMap<#id,DualGraph<#id>> parents <- HashedMap<#id,DualGraph<#id>>.new()
+    traverse (nodes.defaultOrder() -> GraphNode<#id> node) {
+      \ node `DualGraph<#id>.populateParents` parents
+    }
+    return parents.valueOrder() `OrderH:copyTo` Vector<DualGraph<#id>>.new()
+  }
+
+  @type populateParents (GraphNode<#id>,HashedMap<#id,DualGraph<#id>>) -> ()
+  populateParents (node,parents) {
+    if (`present` parents.get(node.getId())) {
+      return _
+    }
+    DualGraph<#id> dualNode <- #self{ node.getId(), Vector<DualGraph<#id>>.new() }
+    \ node.getId() `parents.set` dualNode
+    traverse (node.outgoing().defaultOrder() -> GraphNode<#id> child) {
+      \ populateParents(child,parents)
+      \ require(parents.get(child.getId())).addParent(dualNode)
+    }
+  }
+
+  @value addParent (DualGraph<#id>) -> ()
+  addParent (parent) {
+    \ outgoing.append(parent)
   }
 }
