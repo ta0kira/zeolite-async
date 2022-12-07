@@ -1,96 +1,103 @@
 define GraphTree {
-  @value ReadAt<#n> roots
-  @value DefaultOrder<GraphTree<#n>> subgraphs
+  @value Vector<#id> output
+  @value HashedSet<#id> candidates
+  @value HashedMap<#id,Int> refCounts
+  @value KVReader<#id,DefaultOrder<#id>> blockers
 
-  new (roots,subgraphs) {
-    return #self{
-        roots.defaultOrder() `OrderH:copyTo`  Vector<#n>.new(),
-        subgraphs.defaultOrder() `OrderH:copyTo`  Vector<GraphTree<#n>>.new() }
+  randomize (ready,blockers,random) {
+    #self working <- #self{
+        Vector<#id>.new(),
+        HashedSet<#id>.new(),
+        HashedMap<#id,Int>.new(),
+        blockers }
+    traverse (ready.defaultOrder() -> #id node) {
+      \ working.unblockNode(node)
+    }
+    return working.execute(random).getOutput()
   }
 
-  newRandomizer () {
+  @value execute (Generator<Float>) -> (#self)
+  execute (random) {
+    while (candidates.size() > 0) {
+      ReadAt<#id> ids, ReadAt<Float> weights <- cumulativeWeights()
+      Int index <- weights `chooseRandom` random
+      \ nextNodeIs(ids.readAt(index))
+    }
+    return self
+  }
+
+  @value nextNodeIs (#id) -> ()
+  nextNodeIs (node) {
+    \ output.append(node)
+    \ candidates.remove(node)
+    traverse (getBlockers(node) -> #id child) {
+      $Hidden[node]$
+      Int newCount <- require(refCounts.get(child))-1
+      if (newCount == 0) {
+        \ `refCounts.remove` child
+        \ unblockNode(child)
+      } else {
+        \ child `refCounts.set` newCount
+      }
+    }
+  }
+
+  @type chooseRandom (ReadAt<Float>,Generator<Float>) -> (Int)
+  chooseRandom (weights,random) {
+    Float value <- weights.readAt(weights.size()-1)*random.generate()
+    // NOTE: No point doing a binary search here since constructing `weights` is
+    // already linear time. This is less error-prone.
+    traverse (Counter.zeroIndexed(weights.size()) -> Int index) {
+      if (value < weights.readAt(index)) {
+        return index
+      }
+    }
+    // Default to last in case of precision errors.
+    return weights.size()-1
+  }
+
+  @value unblockNode (#id) -> ()
+  unblockNode (node) {
+    traverse (getBlockers(node) -> #id child) {
+      $Hidden[node]$
+      \ incrementRefCount(child)
+    }
+  }
+
+  @value incrementRefCount (#id) -> ()
+  incrementRefCount (node) {
+    Int count <- 1
     scoped {
-      Vector<GraphRandomizer<#n>> subgraphs2 <- Vector<GraphRandomizer<#n>>.new()
-      traverse (subgraphs.defaultOrder() -> GraphTree<#n> graph) {
-        \ subgraphs2.append(graph.newRandomizer())
+      optional Int existing <- refCounts.get(node)
+    } in if (`present` existing) {
+      count <- count+require(existing)
+    }
+    \ node `refCounts.set` count
+  }
+
+  @value cumulativeWeights () -> (ReadAt<#id>,ReadAt<Float>)
+  cumulativeWeights () {
+    Float cumulative <- 0.0
+    Vector<#id> ids       <- Vector<#id>.new()
+    Vector<Float> weights <- Vector<Float>.new()
+    traverse (candidates.defaultOrder() -> #id node) {
+      cumulative <- cumulative+1.0  // One point for the node itself.
+      traverse (getBlockers(node) -> #id child) {
+        $Hidden[node]$
+        // Weights for children divided evenly among candidates.
+        cumulative <- cumulative+1.0/require(refCounts.get(child)).asFloat()
       }
-    } in return GraphTreeRandomizer<#n>.new(roots,subgraphs2)
-  }
-
-  permCountLog10 () (total) {
-    total <- 0.0
-    traverse (Counter.builder().start(2).limit(roots.size()+1).done() -> Int value) {
-      total <- total+Math.log10(value.asFloat())
+      \ ids.append(node)
+      \ weights.append(cumulative)
     }
-    traverse (subgraphs.defaultOrder() -> GraphTree<#n> subgraph) {
-      total <- total+subgraph.permCountLog10()
-    }
-  }
-}
-
-concrete GraphTreeRandomizer<#n> {
-  @type new (ReadAt<#n>,ReadAt<GraphRandomizer<#n>>) -> (GraphRandomizer<#n>)
-}
-
-define GraphTreeRandomizer {
-  refines GraphRandomizer<#n>
-
-  @value ReadAt<#n> roots
-  @value CategoricalTree<Int> randomizeRoots
-  @value ReadAt<GraphRandomizer<#n>> subgraphs
-  @value CategoricalTree<Int> randomizeSubgraphs
-
-  new (roots,subgraphs) {
-    return #self{ roots, initRoots(roots), subgraphs, initSubgraphs(subgraphs) }
+    return ids, weights
   }
 
-  size () {
-    return randomizeRoots.getTotal()+randomizeSubgraphs.getTotal()
+  @value getBlockers (#id) -> (optional Order<#id>)
+  getBlockers (node) {
+    return require(blockers.get(node)).defaultOrder()
   }
 
-  nextNode (random) {
-    if (randomizeRoots.getTotal() > 0) {
-      $Hidden[subgraphs,randomizeSubgraphs]$
-      scoped {
-        Int index <- randomizeRoots.locate((randomizeRoots.getTotal().asFloat()*random.generate()).asInt())
-      } in {
-        \ `randomizeRoots.decrWeight` index
-        return roots.readAt(index)
-      }
-    } else {
-      $Hidden[roots,randomizeRoots]$
-      scoped {
-        Int index <- randomizeSubgraphs.locate((randomizeSubgraphs.getTotal().asFloat()*random.generate()).asInt())
-      } in {
-        \ `randomizeSubgraphs.decrWeight` index
-        return subgraphs.readAt(index).nextNode(random)
-      }
-    }
-  }
-
-  @type initRoots (ReadAt<#n>) -> (CategoricalTree<Int>)
-  initRoots (roots) (randomizeRoots) {
-    randomizeRoots <- CategoricalTree<Int>.new()
-    traverse (Counter.zeroIndexed(roots.size()) -> Int index) {
-      \ index `randomizeRoots.setWeight` 1
-    }
-  }
-
-  @type initSubgraphs (ReadAt<GraphRandomizer<#n>>) -> (CategoricalTree<Int>)
-  initSubgraphs (subgraphs) (randomizeSubgraphs) {
-    randomizeSubgraphs <- CategoricalTree<Int>.new()
-    traverse (Counter.zeroIndexed(subgraphs.size()) -> Int index) {
-      \ index `randomizeSubgraphs.setWeight` subgraphs.readAt(index).size()
-    }
-  }
-}
-
-define RandomizeGraph {
-  with (graph,random) {
-    Vector<#n> order <- Vector<#n>.new()
-    while (graph.size() > 0) {
-      \ `order.append` graph.nextNode(random)
-    }
-    return order
-  }
+  @value getOutput () -> (DefaultOrder<#id>)
+  getOutput () { return output }
 }
