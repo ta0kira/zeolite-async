@@ -17,6 +17,11 @@ concrete GraphTree<#id> {
   @value newTraverser (IndexSelector) -> (GraphTraverser<#id>)
 }
 
+@value interface GraphNode<|#id> {
+  getId () -> (#id)
+  outgoing () -> (DefaultOrder<#self>)
+}
+
 @value interface GraphTraverser<#id> {
   nextNode () -> (optional #id)
 }

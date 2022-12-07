@@ -6,6 +6,5 @@ extra_paths: [
 public_deps: [
   "lib/container"
   "lib/math"
-  "../topo"
 ]
 mode: incremental {}

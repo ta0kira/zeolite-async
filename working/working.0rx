@@ -47,11 +47,11 @@ define TestProgram {
 
   @type runGraphTest () -> ()
   runGraphTest () {
-    TopoSort<TestNode,Int> topoSort, ReadAt<Int> nodes, GraphTree<Int> graphTree <- defer
+    GraphTree<Int> graphTree <- defer
     if (Argv.global().readAt(1) == "small") {
-      topoSort, nodes, graphTree <- constructSmall()
+      graphTree <- constructSmall()
     } else {
-      topoSort, nodes, graphTree <- `constructLarge` ParseChars.int(Argv.global().readAt(1)).getValue()
+      graphTree <- `constructLarge` ParseChars.int(Argv.global().readAt(1)).getValue()
     }
 
     Int count <- 1000
@@ -62,10 +62,6 @@ define TestProgram {
     Generator<Float> random <- RandomUniform.probability().setSeed(Realtime.monoSeconds().asInt())
 
     traverse (`Counter.zeroIndexed` count -> Int i) {
-//       GraphQueue<TestNode> queue <- nodes `topoSort.graphQueue<ByBlockingCount>` random
-//       \ BasicOutput.stderr().writeNow("queue built...\n")
-//       DefaultOrder<TestNode> copy <- queue `processQueue` Vector<TestNode>.new()
-//       \ formatNodes(copy)
       scoped {
         optional Int nextId <- empty
         GraphTraverser<Int> traverser <-graphTree.newTraverser(SelectRandom.with(random))
@@ -85,23 +81,8 @@ define TestProgram {
     }
   }
 
-  @type processQueue (GraphQueue<TestNode>,[Append<TestNode>&DefaultOrder<TestNode>]) -> (DefaultOrder<TestNode>)
-  processQueue (queue,output) (result) {
-    result <- output
-    scoped {
-      optional TestNode node <- empty
-    } cleanup {
-      \ queue.finish(node)
-    } in while (`present` (node <- queue.exchange(node))) {
-    \ BasicOutput.stderr()
-        .write(".")
-        .flush()
-      \ output.append(`require` node)
-    }
-  }
-
-  @type constructSmall () -> (TopoSort<TestNode,Int>,ReadAt<Int>,GraphTree<Int>)
-  constructSmall () (topoSort,nodes,graphTree) {
+  @type constructSmall () -> (GraphTree<Int>)
+  constructSmall () (graphTree) {
     TestNode node1 <- TestNode.new(1,Vector<TestNode>.new())
     TestNode node2 <- TestNode.new(2,Vector<TestNode>.new())
     TestNode node3 <- TestNode.new(3,Vector<TestNode>.new()
@@ -125,130 +106,18 @@ define TestProgram {
         .append(node6)
         .append(node7)
 
-    topoSort <- `TopoSort:relationFrom<?,Int>` allNodes
-
-    nodes <- Vector<Int>.new()
-        .append(1)
-        .append(2)
-        .append(3)
-        .append(4)
-        .append(5)
-        .append(6)
-        .append(7)
-
     graphTree <- GraphTree<Int>.new(
         `DualGraph:from` allNodes `ComputeBlockers.with` BlockWithAll<Int>.new())
   }
 
-  @type constructLarge (Int) -> (TopoSort<TestNode,Int>,ReadAt<Int>,GraphTree<Int>)
-  constructLarge (size) (topoSort,nodes,graphTree) {
+  @type constructLarge (Int) -> (GraphTree<Int>)
+  constructLarge (size) (graphTree) {
     Vector<TestNode> allNodes <- Vector<TestNode>.new()
     traverse (Counter.zeroIndexed(size) -> Int id) {
       \ allNodes.append(TestNode.new(id,allNodes.duplicate()))
     }
-    \ BasicOutput.stderr().writeNow("graph built...\n")
-    topoSort <- `TopoSort:relationFrom<?,Int>` allNodes
-    \ BasicOutput.stderr().writeNow("topo built...\n")
-    nodes <- Vector<Int>.new().append(size-1)
-
     graphTree <- GraphTree<Int>.new(
         `DualGraph:from` allNodes `ComputeBlockers.with` BlockWithAll<Int>.new())
-  }
-
-  @type formatNodes (DefaultOrder<TestNode>) -> ()
-  formatNodes (nodes) {
-    traverse (nodes.defaultOrder() -> TestNode node) {
-      \ BasicOutput.stdout()
-          .write(node.getId())
-          .write(" ")
-          .flush()
-    }
-    \ BasicOutput.stdout()
-        .write("\n")
-        .flush()
-  }
-}
-
-concrete ByTransitiveCount {
-  defines PriorityPolicy<Int>
-  refines Priority<Int>
-}
-
-define ByTransitiveCount {
-  $ReadOnly[priority]$
-
-  @value KVReader<Int,Int> priority
-
-  new (blocking) {
-    HashedMap<Int,[Container&DefaultOrder<Int>]> allBlocking <- HashedMap<Int,[Container&DefaultOrder<Int>]>.new()
-    traverse (blocking.keyOrder() -> Int key) {
-      \ collect(key,blocking,allBlocking)
-    }
-    HashedMap<Int,Int> priority <- HashedMap<Int,Int>.new()
-    traverse (allBlocking.defaultOrder() -> KeyValue<Int,Container> keyValue) {
-      \ keyValue.getKey() `priority.set` keyValue.getValue().size()
-    }
-    return #self{ priority }
-  }
-
-  nodePriority (id) {
-    return `require` `priority.get` id
-  }
-
-  @type collect (Int,KVReader<Int,BlockerNode<Int>>,HashedMap<Int,[Container&DefaultOrder<Int>]>) -> (DefaultOrder<Int>)
-  collect (id,blocking,allBlocking) {
-    scoped {
-      optional DefaultOrder<Int> existing <- `allBlocking.get` id
-    } in if (`present` existing) {
-      return `require` existing
-    } else {
-      HashedSet<Int> unique <- HashedSet<Int>.new().add(id)
-      BlockerNode<Int> node <- `require` `blocking.get` id
-      traverse (node.blocking().defaultOrder() -> Int id2) {
-        $Hidden[id,node]$
-        \ collect(id2,blocking,allBlocking).defaultOrder() `OrderH:copyTo` unique
-      }
-      \ id `allBlocking.set` unique
-      return unique
-    }
-  }
-}
-
-concrete ByBlockingCount {
-  defines PriorityPolicy<Int>
-  refines Priority<Int>
-}
-
-define ByBlockingCount {
-  $ReadOnly[priority]$
-
-  @value KVReader<Int,Int> priority
-
-  new (blocking) {
-    HashedMap<Int,Int> priority <- HashedMap<Int,Int>.new()
-    traverse (blocking.keyOrder() -> Int key) {
-      \ key `priority.set` require(blocking.get(key)).blocking().size()+1
-    }
-    return #self{ priority }
-  }
-
-  nodePriority (id) {
-    return `require` `priority.get` id
-  }
-}
-
-concrete ConstantPriority {
-  defines PriorityPolicy<Int>
-  refines Priority<Int>
-}
-
-define ConstantPriority {
-  new (_) {
-    return #self{ }
-  }
-
-  nodePriority (_) {
-    return 1
   }
 }
 
