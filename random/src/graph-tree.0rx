@@ -4,13 +4,13 @@ define GraphTree {
   @value HashedMap<#id,Int> refCounts
   @value [KVReader<#id,DefaultOrder<#id>> & DefaultOrder<KeyValue<#id,DefaultOrder<#id>>>] blockers
 
-  randomize (blockers,random) {
+  randomize (blockers,selector) {
     #self working <- #self{
         Vector<#id>.new(),
         HashedSet<#id>.new(),
         HashedMap<#id,Int>.new(),
         blockers }
-    return working.findUnblocked().execute(random).getOutput()
+    return working.findUnblocked().execute(selector).getOutput()
   }
 
   @value findUnblocked () -> (#self)
@@ -29,15 +29,15 @@ define GraphTree {
     return self
   }
 
-  @value execute (Generator<Float>) -> (#self)
-  execute (random) {
+  @value execute (IndexSelector) -> (#self)
+  execute (selector) {
     while (candidates.size() > 0) {
       if (candidates.size() == 1) {
         // Just use first node if that's the only one.
-        \ nextNodeIs(`require` candidates.defaultOrder())
+        \ nextNodeIs(require(candidates.defaultOrder()).get())
       } else {
-        ReadAt<#id> ids, ReadAt<Float> weights <- cumulativeWeights()
-        Int index <- weights `chooseRandom` random
+        ReadAt<#id> ids, ReadAt<Float> weights <- computeWeights()
+        Int index <- `selector.selectFrom` weights
         \ nextNodeIs(ids.readAt(index))
       }
     }
@@ -60,20 +60,6 @@ define GraphTree {
     }
   }
 
-  @type chooseRandom (ReadAt<Float>,Generator<Float>) -> (Int)
-  chooseRandom (weights,random) {
-    Float value <- weights.readAt(weights.size()-1)*random.generate()
-    // NOTE: No point doing a binary search here since constructing `weights` is
-    // already linear time. This is less error-prone.
-    traverse (Counter.zeroIndexed(weights.size()) -> Int index) {
-      if (value < weights.readAt(index)) {
-        return index
-      }
-    }
-    // Default to last in case of precision errors.
-    return weights.size()-1
-  }
-
   @value unblockNode (#id) -> ()
   unblockNode (node) {
     traverse (getBlockers(node) -> #id child) {
@@ -93,20 +79,19 @@ define GraphTree {
     \ node `refCounts.set` count
   }
 
-  @value cumulativeWeights () -> (ReadAt<#id>,ReadAt<Float>)
-  cumulativeWeights () {
-    Float cumulative <- 0.0
+  @value computeWeights () -> (ReadAt<#id>,ReadAt<Float>)
+  computeWeights () {
     Vector<#id> ids       <- Vector<#id>.new()
     Vector<Float> weights <- Vector<Float>.new()
     traverse (candidates.defaultOrder() -> #id node) {
-      cumulative <- cumulative+1.0  // One point for the node itself.
+      Float weight <- 1.0  // One point for the node itself.
       traverse (getBlockers(node) -> #id child) {
         $Hidden[node]$
         // Weights for children divided evenly among candidates.
-        cumulative <- cumulative+1.0/require(refCounts.get(child)).asFloat()
+        weight <- weight+1.0/require(refCounts.get(child)).asFloat()
       }
       \ ids.append(node)
-      \ weights.append(cumulative)
+      \ weights.append(weight)
     }
     return ids, weights
   }
@@ -118,4 +103,98 @@ define GraphTree {
 
   @value getOutput () -> (DefaultOrder<#id>)
   getOutput () { return output }
+}
+
+define SelectRandom {
+  @value Generator<Float> random
+
+  new (random) {
+    return #self{ random }
+  }
+
+  selectFrom (candidates) {
+    Float total <- 0.0
+    traverse (Counter.zeroIndexed(candidates.size()) -> Int index) {
+      total <- total+candidates.readAt(index)
+    }
+    Float value <- random.generate()*total
+    $Hidden[total]$
+    traverse (Counter.zeroIndexed(candidates.size()) -> Int index) {
+      if (value < candidates.readAt(index)) {
+        return index
+      } else {
+        value <- value-candidates.readAt(index)
+      }
+    }
+    // In case rounding errors push `value` past the end.
+    return candidates.size()-1
+  }
+}
+
+define BlockWithAll {
+  new () {
+    return #self{ }
+  }
+
+  getChildren (node,blockers) {
+    HashedSet<#id> children <- HashedSet<#id>.new()
+    traverse (node.outgoing().defaultOrder() -> GraphNode<#id> child) {
+      $Hidden[node]$
+      scoped {
+        optional DefaultOrder<#id> childBlockers <- blockers.get(child.getId())
+      } in if (`present` childBlockers) {
+        \ require(childBlockers).defaultOrder() `OrderH:copyTo` children
+      }
+    }
+    return children
+  }
+}
+
+define ComputeBlockers {
+  with (nodes,policy) (blockers) {
+    blockers <- HashedMap<#id,DefaultOrder<#id>>.new()
+    traverse (findUnblocked(nodes).defaultOrder() -> GraphNode<#id> node) {
+      \ setBlockers(node,policy,blockers)
+    }
+  }
+
+  @category setBlockers<#id>
+    #id immutable
+    #id requires Hashed
+    #id defines Equals<#id>
+  (GraphNode<#id>,BlockerPolicy<#id,GraphNode<#id>>,HashedMap<#id,DefaultOrder<#id>>) -> ()
+  setBlockers (node,policy,blockers) {
+    if (`present` blockers.get(node.getId())) {
+      return _
+    }
+    // This mitigates potential cycles in the graph.
+    \ node.getId() `blockers.set` AlwaysEmpty.default()
+    traverse (node.outgoing().defaultOrder() -> GraphNode<#id> child) {
+      $Hidden[node]$
+      \ setBlockers(child,policy,blockers)
+    }
+    \ node.getId() `blockers.set` policy.getChildren(node,blockers)
+  }
+
+
+  @category findUnblocked<#id>
+    #id immutable
+    #id requires Hashed
+    #id defines Equals<#id>
+  (DefaultOrder<GraphNode<#id>>) -> (Vector<GraphNode<#id>>)
+  findUnblocked (nodes) (unblocked) {
+    unblocked <- Vector<GraphNode<#id>>.new()
+    HashedSet<#id> blocked <- HashedSet<#id>.new()
+    traverse (nodes.defaultOrder() -> GraphNode<#id> node) {
+      traverse (node.outgoing().defaultOrder() -> GraphNode<#id> child) {
+        $Hidden[node]$
+        \ blocked.add(child.getId())
+      }
+    }
+    traverse (nodes.defaultOrder() -> GraphNode<#id> node) {
+      if (!blocked.member(node.getId())) {
+        \ unblocked.append(node)
+      }
+    }
+  }
 }
