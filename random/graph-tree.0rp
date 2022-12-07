@@ -9,10 +9,15 @@ concrete GraphTree<#id> {
   //   include indirect children to make weighting more accurate.
   // - Hypothesized worst-case computational complexity is O(VE) or O(V^3), with
   //   best case being O(V^2).
-  @type randomize (
-      [KVReader<#id,DefaultOrder<#id>>&DefaultOrder<KeyValue<#id,DefaultOrder<#id>>>] /*blockers*/,
+  @type new (
+      DefaultOrder<#id> /*unblocked*/,
+      KVReader<#id,DefaultOrder<#id>> /*blockers*/,
       IndexSelector /*selector*/)
-  -> (DefaultOrder<#id>)
+  -> (GraphTraverser<#id>)
+}
+
+@value interface GraphTraverser<#id> {
+  nextNode () -> (optional #id)
 }
 
 @value interface IndexSelector {
@@ -26,7 +31,7 @@ concrete GraphTree<#id> {
 concrete SelectRandom {
   refines IndexSelector
 
-  @type new (Generator<Float>) -> (#self)
+  @type with (Generator<Float>) -> (#self)
 }
 
 concrete BlockWithAll<#id> {
@@ -43,5 +48,6 @@ concrete ComputeBlockers {
     #id immutable
     #id requires Hashed
     #id defines Equals<#id>
-  (DefaultOrder<GraphNode<#id>>,BlockerPolicy<#id,GraphNode<#id>>) -> (HashedMap<#id,DefaultOrder<#id>>)
+  (DefaultOrder<GraphNode<#id>>,BlockerPolicy<#id,GraphNode<#id>> /*nodes*/) ->
+  (Vector<#id> /*unblocked*/,HashedMap<#id,DefaultOrder<#id>> /*blockers*/)
 }

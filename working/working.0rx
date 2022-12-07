@@ -47,11 +47,11 @@ define TestProgram {
 
   @type runGraphTest () -> ()
   runGraphTest () {
-    TopoSort<TestNode,Int> topoSort, ReadAt<Int> nodes <- defer
+    TopoSort<TestNode,Int> topoSort, ReadAt<Int> nodes, GraphTraverser<Int> traverser <- defer
     if (Argv.global().readAt(1) == "small") {
-      topoSort, nodes <- constructSmall()
+      topoSort, nodes, traverser <- constructSmall()
     } else {
-      topoSort, nodes <- `constructLarge` ParseChars.int(Argv.global().readAt(1)).getValue()
+      topoSort, nodes, traverser <- `constructLarge` ParseChars.int(Argv.global().readAt(1)).getValue()
     }
 
     Int count <- 1000
@@ -62,10 +62,21 @@ define TestProgram {
     Generator<Float> random <- RandomUniform.probability().setSeed(Realtime.monoSeconds().asInt())
 
     traverse (`Counter.zeroIndexed` count -> Int i) {
-      GraphQueue<TestNode> queue <- nodes `topoSort.graphQueue<ByBlockingCount>` random
-      \ BasicOutput.stderr().writeNow("queue built...\n")
-      DefaultOrder<TestNode> copy <- queue `processQueue` Vector<TestNode>.new()
-      \ formatNodes(copy)
+//       GraphQueue<TestNode> queue <- nodes `topoSort.graphQueue<ByBlockingCount>` random
+//       \ BasicOutput.stderr().writeNow("queue built...\n")
+//       DefaultOrder<TestNode> copy <- queue `processQueue` Vector<TestNode>.new()
+//       \ formatNodes(copy)
+      scoped {
+        optional Int nextId <- empty
+      } in while (`present` (nextId <- traverser.nextNode())) {
+        \ BasicOutput.stdout()
+            .write(`require` nextId)
+            .write(" ")
+            .flush()
+        \ BasicOutput.stdout()
+            .write("\n")
+            .flush()
+      }
       \ BasicOutput.stderr()
           .write(i)
           .write("\n")
@@ -88,8 +99,8 @@ define TestProgram {
     }
   }
 
-  @type constructSmall () -> (TopoSort<TestNode,Int>,ReadAt<Int>)
-  constructSmall () (topoSort,nodes) {
+  @type constructSmall () -> (TopoSort<TestNode,Int>,ReadAt<Int>,GraphTraverser<Int>)
+  constructSmall () (topoSort,nodes,traverser) {
     TestNode node1 <- TestNode.new(1,Vector<TestNode>.new())
     TestNode node2 <- TestNode.new(2,Vector<TestNode>.new())
     TestNode node3 <- TestNode.new(3,Vector<TestNode>.new()
@@ -104,7 +115,7 @@ define TestProgram {
     TestNode node7 <- TestNode.new(7,Vector<TestNode>.new()
         .append(node6))
 
-    topoSort <- `TopoSort:relationFrom<?,Int>` Vector<TestNode>.new()
+    Vector<TestNode> allNodes <- Vector<TestNode>.new()
         .append(node1)
         .append(node2)
         .append(node3)
@@ -112,6 +123,8 @@ define TestProgram {
         .append(node5)
         .append(node6)
         .append(node7)
+
+    topoSort <- `TopoSort:relationFrom<?,Int>` allNodes
 
     nodes <- Vector<Int>.new()
         .append(1)
@@ -121,10 +134,15 @@ define TestProgram {
         .append(5)
         .append(6)
         .append(7)
+
+    scoped {
+      DefaultOrder<Int> unblocked, KVReader<Int,DefaultOrder<Int>> blockers <-
+          allNodes `ComputeBlockers.with` BlockWithAll<Int>.new()
+    } in traverser <- GraphTree<Int>.new(unblocked,blockers,SelectRandom.with(RandomUniform.probability()))
   }
 
-  @type constructLarge (Int) -> (TopoSort<TestNode,Int>,ReadAt<Int>)
-  constructLarge (size) (topoSort,nodes) {
+  @type constructLarge (Int) -> (TopoSort<TestNode,Int>,ReadAt<Int>,GraphTraverser<Int>)
+  constructLarge (size) (topoSort,nodes,traverser) {
     Vector<TestNode> allNodes <- Vector<TestNode>.new()
     traverse (Counter.zeroIndexed(size) -> Int id) {
       \ allNodes.append(TestNode.new(id,allNodes.duplicate()))
@@ -133,6 +151,11 @@ define TestProgram {
     topoSort <- `TopoSort:relationFrom<?,Int>` allNodes
     \ BasicOutput.stderr().writeNow("topo built...\n")
     nodes <- Vector<Int>.new().append(size-1)
+
+    scoped {
+      DefaultOrder<Int> unblocked, KVReader<Int,DefaultOrder<Int>> blockers <-
+          allNodes `ComputeBlockers.with` BlockWithAll<Int>.new()
+    } in traverser <- GraphTree<Int>.new(unblocked,blockers,SelectRandom.with(RandomUniform.probability()))
   }
 
   @type formatNodes (DefaultOrder<TestNode>) -> ()
