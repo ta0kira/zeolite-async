@@ -1,15 +1,15 @@
 define GraphTree {
   $ReadOnlyExcept[]$
 
-  @value DefaultOrder<#id> unblocked
+  @value DefaultOrder<KeyValue<#id,DefaultOrder<#id>>> blockedBy
   @value KVReader<#id,DefaultOrder<#id>> blockers
 
-  new (unblocked,blockers) {
-    return #self{ unblocked, blockers }
+  new (blockedBy,blockers) {
+    return #self{ blockedBy, blockers }
   }
 
   newTraverser (selector) {
-    return GraphTreeTraverser<#id>.new(unblocked,blockers,selector)
+    return GraphTreeTraverser<#id>.new(blockedBy,blockers,selector)
   }
 }
 
@@ -20,7 +20,7 @@ concrete GraphTreeTraverser<#id> {
   #id requires Hashed
   #id defines Equals<#id>
 
-  @type new (DefaultOrder<#id>,KVReader<#id,DefaultOrder<#id>>,IndexSelector) -> (#self)
+  @type new (DefaultOrder<KeyValue<#id,DefaultOrder<#id>>>,KVReader<#id,DefaultOrder<#id>>,IndexSelector) -> (#self)
 }
 
 define GraphTreeTraverser {
@@ -30,16 +30,18 @@ define GraphTreeTraverser {
 
   @value HashedSet<#id> candidates
   @value HashedMap<#id,Int> refCounts
+  @value HashedMap<#id,HashedSet<#id>> blockedBy
   @value KVReader<#id,DefaultOrder<#id>> blockers
   @value IndexSelector selector
 
-  new (unblocked,blockers,selector) {
+  new (blockedBy,blockers,selector) {
     return #self{
         HashedSet<#id>.new(),
         HashedMap<#id,Int>.new(),
+        deepCopyMap(blockedBy),
         blockers,
         selector
-    }.setUnblocked(unblocked)
+    }.setUnblocked()
   }
 
   nextNode () (node) {
@@ -56,10 +58,20 @@ define GraphTreeTraverser {
     }
   }
 
-  @value setUnblocked (DefaultOrder<#id>) -> (#self)
-  setUnblocked (unblocked) {
-    traverse (unblocked.defaultOrder() -> #id node) {
-      \ unblockNode(node)
+  @type deepCopyMap (DefaultOrder<KeyValue<#id,DefaultOrder<#id>>>) -> (HashedMap<#id,HashedSet<#id>>)
+  deepCopyMap (original) (copy) {
+    copy <- HashedMap<#id,HashedSet<#id>>.new()
+    traverse (original.defaultOrder() -> KeyValue<#id,DefaultOrder<#id>> keyValue) {
+      \ keyValue.getKey() `copy.set` (keyValue.getValue().defaultOrder() `OrderH:copyTo` HashedSet<#id>.new())
+    }
+  }
+
+  @value setUnblocked () -> (#self)
+  setUnblocked () {
+    traverse (blockedBy.defaultOrder() -> KeyValue<#id,Container> node) {
+      if (node.getValue().size() == 0) {
+        \ unblockNode(node.getKey())
+      }
     }
     return self
   }
@@ -67,26 +79,13 @@ define GraphTreeTraverser {
   @value nextNodeIs (#id) -> (#id)
   nextNodeIs (node) {
     \ candidates.remove(node)
-    HashedSet<#id> stillBlocked <- HashedSet<#id>.new()
     traverse (getBlockers(node) -> #id child) {
+      HashedSet<#id> stillBlockedBy <- require(blockedBy.get(child)).remove(node)
       $Hidden[node]$
-      Int newCount <- require(refCounts.get(child))-1
-      \ child `refCounts.set` newCount
-      if (newCount == 0) {
-        traverse (getBlockers(child) -> #id childChild) {
-          $Hidden[child]$
-          \ stillBlocked.add(childChild)
-        }
-      } else {
-        \ stillBlocked.add(child)
-      }
-    }
-    // This covers the case where one child of `node` blocks another.
-    traverse (getBlockers(node) -> #id child) {
-      $Hidden[node]$
-      if (!stillBlocked.member(child)) {
-        \ refCounts.remove(child)
+      if (stillBlockedBy.size() == 0) {
         \ unblockNode(child)
+      } else {
+        \ decrementRefCount(child)
       }
     }
     return node
@@ -95,6 +94,8 @@ define GraphTreeTraverser {
   @value unblockNode (#id) -> ()
   unblockNode (node) {
     \ candidates.add(node)
+    \ refCounts.remove(node)
+    // NOTE: Don't change `blockedBy` here because we might be in a loop.
     traverse (getBlockers(node) -> #id child) {
       $Hidden[node]$
       \ incrementRefCount(child)
@@ -108,6 +109,17 @@ define GraphTreeTraverser {
       optional Int existing <- refCounts.get(node)
     } in if (`present` existing) {
       count <- count+require(existing)
+    }
+    \ node `refCounts.set` count
+  }
+
+  @value decrementRefCount (#id) -> ()
+  decrementRefCount (node) {
+    Int count <- 0
+    scoped {
+      optional Int existing <- refCounts.get(node)
+    } in if (`present` existing) {
+      count <- require(existing)-1
     }
     \ node `refCounts.set` count
   }
@@ -161,6 +173,24 @@ define SelectRandom {
   }
 }
 
+define SelectMax {
+  new () {
+    return #self{ }
+  }
+
+  selectFrom (candidates) (chosen) {
+    chosen <- candidates.size()-1
+    Float max <- 0.0
+    traverse (Counter.zeroIndexed(candidates.size()) -> Int index) {
+      $ReadOnly[index]$
+      if (candidates.readAt(index) > max) {
+        chosen <- index
+        max <- candidates.readAt(index)
+      }
+    }
+  }
+}
+
 define BlockWithAll {
   new () {
     return #self{ }
@@ -181,13 +211,52 @@ define BlockWithAll {
   }
 }
 
+define BlockWithDirect {
+  new () {
+    return #self{ }
+  }
+
+  getChildren (node,blockers) {
+    HashedSet<#id> children <- HashedSet<#id>.new()
+    traverse (node.outgoing().defaultOrder() -> GraphNode<#id> child) {
+      $Hidden[node]$
+      \ children.add(child.getId())
+    }
+    return children
+  }
+}
+
 define ComputeBlockers {
-  with (nodes,policy) (unblocked,blockers) {
-    unblocked <- Vector<#id>.new()
-    blockers <- HashedMap<#id,DefaultOrder<#id>>.new()
-    traverse (findUnblocked(nodes).defaultOrder() -> GraphNode<#id> node) {
-      \ unblocked.append(node.getId())
-      \ setBlockers(node,policy,blockers)
+  with (nodes,policy) (blockedBy,blockers) {
+    HashedMap<#id,GraphNode<#id>> idToNode <- HashedMap<#id,GraphNode<#id>>.new()
+    blockedBy <- HashedMap<#id,HashedSet<#id>>.new()
+    blockers  <- HashedMap<#id,DefaultOrder<#id>>.new()
+    traverse (nodes.defaultOrder() -> GraphNode<#id> node) {
+      \ node.getId() `idToNode.set` node
+      \ setBlockedBy(node,blockedBy)
+    }
+    traverse (blockedBy.defaultOrder() -> KeyValue<#id,Container> node) {
+      if (node.getValue().size() == 0) {
+        \ setBlockers(`require` idToNode.get(node.getKey()),policy,blockers)
+      }
+    }
+  }
+
+  @category setBlockedBy<#id>
+    #id immutable
+    #id requires Hashed
+    #id defines Equals<#id>
+  (GraphNode<#id>,HashedMap<#id,HashedSet<#id>>) -> ()
+  setBlockedBy (node,blockedBy) {
+    if (! `present` blockedBy.get(node.getId())) {
+      \ node.getId() `blockedBy.set` HashedSet<#id>.new()
+    }
+    traverse (node.outgoing().defaultOrder() -> GraphNode<#id> child) {
+      if (! `present` blockedBy.get(child.getId())) {
+        $Hidden[node]$
+        \ child.getId() `blockedBy.set` HashedSet<#id>.new()
+      }
+      \ require(blockedBy.get(child.getId())).add(node.getId())
     }
   }
 

@@ -68,7 +68,7 @@ define TestProgram {
 //       \ formatNodes(copy)
       scoped {
         optional Int nextId <- empty
-        GraphTraverser<Int> traverser <-graphTree.newTraverser(SelectRandom.with(RandomUniform.probability()))
+        GraphTraverser<Int> traverser <-graphTree.newTraverser(SelectRandom.with(random))
       } in while (`present` (nextId <- traverser.nextNode())) {
         \ BasicOutput.stdout()
             .write(`require` nextId)
@@ -136,10 +136,8 @@ define TestProgram {
         .append(6)
         .append(7)
 
-    scoped {
-      DefaultOrder<Int> unblocked, KVReader<Int,DefaultOrder<Int>> blockers <-
-          `DualGraph:from` allNodes `ComputeBlockers.with` BlockWithAll<Int>.new()
-    } in graphTree <- GraphTree<Int>.new(unblocked,blockers)
+    graphTree <- GraphTree<Int>.new(
+        `DualGraph:from` allNodes `ComputeBlockers.with` BlockWithAll<Int>.new())
   }
 
   @type constructLarge (Int) -> (TopoSort<TestNode,Int>,ReadAt<Int>,GraphTree<Int>)
@@ -153,10 +151,8 @@ define TestProgram {
     \ BasicOutput.stderr().writeNow("topo built...\n")
     nodes <- Vector<Int>.new().append(size-1)
 
-    scoped {
-      DefaultOrder<Int> unblocked, KVReader<Int,DefaultOrder<Int>> blockers <-
-          `DualGraph:from` allNodes `ComputeBlockers.with` BlockWithAll<Int>.new()
-    } in graphTree <- GraphTree<Int>.new(unblocked,blockers)
+    graphTree <- GraphTree<Int>.new(
+        `DualGraph:from` allNodes `ComputeBlockers.with` BlockWithAll<Int>.new())
   }
 
   @type formatNodes (DefaultOrder<TestNode>) -> ()

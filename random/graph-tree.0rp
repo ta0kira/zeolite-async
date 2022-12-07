@@ -10,7 +10,8 @@ concrete GraphTree<#id> {
   // - Hypothesized worst-case computational complexity is O(VE) or O(V^3), with
   //   best case being O(V^2).
   @type new
-  (DefaultOrder<#id> /*unblocked*/,KVReader<#id,DefaultOrder<#id>> /*blockers*/) ->
+  (DefaultOrder<KeyValue<#id,DefaultOrder<#id>>> /*blockedBy*/,
+   KVReader<#id,DefaultOrder<#id>> /*blockers*/) ->
   (#self)
 
   @value newTraverser (IndexSelector) -> (GraphTraverser<#id>)
@@ -34,7 +35,22 @@ concrete SelectRandom {
   @type with (Generator<Float>) -> (#self)
 }
 
+concrete SelectMax {
+  refines IndexSelector
+
+  @type new () -> (#self)
+}
+
 concrete BlockWithAll<#id> {
+  refines BlockerPolicy<#id,GraphNode<#id>>
+  #id immutable
+  #id requires Hashed
+  #id defines Equals<#id>
+
+  @type new () -> (#self)
+}
+
+concrete BlockWithDirect<#id> {
   refines BlockerPolicy<#id,GraphNode<#id>>
   #id immutable
   #id requires Hashed
@@ -49,7 +65,7 @@ concrete ComputeBlockers {
     #id requires Hashed
     #id defines Equals<#id>
   (DefaultOrder<GraphNode<#id>>,BlockerPolicy<#id,GraphNode<#id>> /*nodes*/) ->
-  (Vector<#id> /*unblocked*/,HashedMap<#id,DefaultOrder<#id>> /*blockers*/)
+  (HashedMap<#id,HashedSet<#id>> /*blockedBy*/,HashedMap<#id,DefaultOrder<#id>> /*blockers*/)
 }
 
 concrete DualGraph<#id> {
