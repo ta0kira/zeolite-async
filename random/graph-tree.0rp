@@ -3,9 +3,13 @@ concrete GraphTree<#id> {
   #id requires Hashed
   #id defines Equals<#id>
 
+  // Notes:
+  // - Map of blockers must contain all nodes as keys.
+  // - Children in blockers should include immediate children, but can also
+  //   include indirect children to make weighting more accurate.
+  // - Hypothesized computational complexity is O(VE) or O(V^3).
   @type randomize (
-      DefaultOrder<#id> /*ready*/,
-      KVReader<#id,DefaultOrder<#id>> /*blockers*/,
+      [KVReader<#id,DefaultOrder<#id>>&DefaultOrder<KeyValue<#id,DefaultOrder<#id>>>] /*blockers*/,
       Generator<Float> /*random*/)
   -> (DefaultOrder<#id>)
 }

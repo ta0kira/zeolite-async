@@ -2,26 +2,44 @@ define GraphTree {
   @value Vector<#id> output
   @value HashedSet<#id> candidates
   @value HashedMap<#id,Int> refCounts
-  @value KVReader<#id,DefaultOrder<#id>> blockers
+  @value [KVReader<#id,DefaultOrder<#id>> & DefaultOrder<KeyValue<#id,DefaultOrder<#id>>>] blockers
 
-  randomize (ready,blockers,random) {
+  randomize (blockers,random) {
     #self working <- #self{
         Vector<#id>.new(),
         HashedSet<#id>.new(),
         HashedMap<#id,Int>.new(),
         blockers }
-    traverse (ready.defaultOrder() -> #id node) {
-      \ working.unblockNode(node)
+    return working.findUnblocked().execute(random).getOutput()
+  }
+
+  @value findUnblocked () -> (#self)
+  findUnblocked () {
+    HashedSet<#id> blocked <- HashedSet<#id>.new()
+    traverse (blockers.defaultOrder() -> KeyValue<any,DefaultOrder<#id>> children) {
+      traverse (children.getValue().defaultOrder() -> #id child) {
+        \ blocked.add(child)
+      }
     }
-    return working.execute(random).getOutput()
+    traverse (blockers.defaultOrder() -> KeyValue<#id,any> node) {
+      if (!blocked.member(node.getKey())) {
+        \ unblockNode(node.getKey())
+      }
+    }
+    return self
   }
 
   @value execute (Generator<Float>) -> (#self)
   execute (random) {
     while (candidates.size() > 0) {
-      ReadAt<#id> ids, ReadAt<Float> weights <- cumulativeWeights()
-      Int index <- weights `chooseRandom` random
-      \ nextNodeIs(ids.readAt(index))
+      if (candidates.size() == 1) {
+        // Just use first node if that's the only one.
+        \ nextNodeIs(`require` candidates.defaultOrder())
+      } else {
+        ReadAt<#id> ids, ReadAt<Float> weights <- cumulativeWeights()
+        Int index <- weights `chooseRandom` random
+        \ nextNodeIs(ids.readAt(index))
+      }
     }
     return self
   }
