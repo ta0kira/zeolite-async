@@ -147,7 +147,7 @@ define GraphTreeTraverser {
   }
 }
 
-define SelectRandom {
+define SelectRandomWeighted {
   @value Generator<Float> random
 
   with (random) {
@@ -170,6 +170,18 @@ define SelectRandom {
     }
     // In case rounding errors push `value` past the end.
     return candidates.size()-1
+  }
+}
+
+define SelectRandomUniform {
+  @value Generator<Float> random
+
+  with (random) {
+    return #self{ random }
+  }
+
+  selectFrom (candidates) {
+    return (random.generate()*candidates.size().asFloat()).asInt() `Ranges:min` (candidates.size()-1)
   }
 }
 
@@ -197,7 +209,13 @@ define BlockWithAll {
   }
 
   getChildren (node,blockers) {
-    HashedSet<#id> children <- HashedSet<#id>.new()
+    // TODO: This can probably be done using `Vector` and merging. This would
+    // require some way to keep the blockers of the children sorted based on
+    // the current element they're on. Can't use `SortedSet` because that
+    // requires `immutable` values, although maybe we could use some data
+    // struct that just contains current value, index to child, and index within
+    // child to current value.
+    SortedSet<#id> children <- SortedSet<#id>.new()
     traverse (node.outgoing().defaultOrder() -> GraphNode<#id> child) {
       $Hidden[node]$
       \ children.add(child.getId())
@@ -217,10 +235,10 @@ define BlockWithDirect {
   }
 
   getChildren (node,blockers) {
-    HashedSet<#id> children <- HashedSet<#id>.new()
+    Vector<#id> children <- Vector<#id>.new()
     traverse (node.outgoing().defaultOrder() -> GraphNode<#id> child) {
       $Hidden[node]$
-      \ children.add(child.getId())
+      \ children.append(child.getId())
     }
     return children
   }

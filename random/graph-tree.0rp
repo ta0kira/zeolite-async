@@ -34,7 +34,13 @@ concrete GraphTree<#id> {
   getChildren (#n,KVReader<#id,DefaultOrder<#id>>) -> (DefaultOrder<#id>)
 }
 
-concrete SelectRandom {
+concrete SelectRandomWeighted {
+  refines IndexSelector
+
+  @type with (Generator<Float>) -> (#self)
+}
+
+concrete SelectRandomUniform {
   refines IndexSelector
 
   @type with (Generator<Float>) -> (#self)
@@ -49,17 +55,17 @@ concrete SelectMax {
 concrete BlockWithAll<#id> {
   refines BlockerPolicy<#id,GraphNode<#id>>
   #id immutable
-  #id requires Hashed
   #id defines Equals<#id>
+  #id defines LessThan<#id>
 
   @type new () -> (#self)
 }
 
+// TODO: Create a version of this that prunes children that are blocked by other
+// children so that the dependencies are minimized.
 concrete BlockWithDirect<#id> {
   refines BlockerPolicy<#id,GraphNode<#id>>
   #id immutable
-  #id requires Hashed
-  #id defines Equals<#id>
 
   @type new () -> (#self)
 }
