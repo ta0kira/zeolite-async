@@ -209,23 +209,14 @@ define BlockWithAll {
   }
 
   getChildren (node,blockers) {
-    // TODO: This can probably be done using `Vector` and merging. This would
-    // require some way to keep the blockers of the children sorted based on
-    // the current element they're on. Can't use `SortedSet` because that
-    // requires `immutable` values, although maybe we could use some data
-    // struct that just contains current value, index to child, and index within
-    // child to current value.
-    SortedSet<#id> children <- SortedSet<#id>.new()
+    Vector<#id> topLevel <- Vector<#id>.new()
+    Vector<DefaultOrder<#id>> children <- Vector<DefaultOrder<#id>>.new()
     traverse (node.outgoing().defaultOrder() -> GraphNode<#id> child) {
       $Hidden[node]$
-      \ children.add(child.getId())
-      scoped {
-        optional DefaultOrder<#id> childBlockers <- blockers.get(child.getId())
-      } in if (`present` childBlockers) {
-        \ require(childBlockers).defaultOrder() `OrderH:copyTo` children
-      }
+      \ topLevel.append(child.getId())
+      \ children.append(`require` `blockers.get` child.getId())
     }
-    return children
+    return MergePresorted:from(topLevel,children)
   }
 }
 

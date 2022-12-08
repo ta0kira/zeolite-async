@@ -1,0 +1,9 @@
+$ModuleOnly$
+
+concrete MergePresorted {
+  @category from<#x>
+    #x immutable
+    #x defines Equals<#x>
+    #x defines LessThan<#x>
+  (DefaultOrder<#x> /*topLevel*/,DefaultOrder<DefaultOrder<#x>> /*children*/) -> (Vector<#x>)
+}

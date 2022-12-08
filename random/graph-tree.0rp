@@ -61,8 +61,15 @@ concrete BlockWithAll<#id> {
   @type new () -> (#self)
 }
 
-// TODO: Create a version of this that prunes children that are blocked by other
+// TODO: Create a `BlockerPolicy` that prunes children that are blocked by other
 // children so that the dependencies are minimized.
+//
+// That's non-trivial because:
+// - The output for a given node needs to be pruned.
+// - Pruning a node requires that its children *not* be pruned.
+//
+// It would be simple if we somehow made a first that was like `BlockWithAll`.
+
 concrete BlockWithDirect<#id> {
   refines BlockerPolicy<#id,GraphNode<#id>>
   #id immutable
