@@ -273,7 +273,7 @@ define ComputeBlockers {
     #id immutable
     #id requires Hashed
     #id defines Equals<#id>
-  (GraphNode<#id>,BlockerPolicy<#id,GraphNode<#id>>,HashedMap<#id,DefaultOrder<#id>>) -> ()
+  (GraphNode<#id>,BlockerPolicy<GraphNode<#id>,#id>,HashedMap<#id,DefaultOrder<#id>>) -> ()
   setBlockers (node,policy,blockers) {
     if (`present` blockers.get(node.getId())) {
       return _

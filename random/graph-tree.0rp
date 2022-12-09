@@ -22,7 +22,7 @@ concrete GraphTree<#id> {
   outgoing () -> (DefaultOrder<#self>)
 }
 
-@value interface GraphTraverser<#id> {
+@value interface GraphTraverser<|#id> {
   nextNode () -> (optional #id)
 }
 
@@ -30,7 +30,7 @@ concrete GraphTree<#id> {
   selectFrom (ReadAt<Float>) -> (Int)
 }
 
-@value interface BlockerPolicy<#id,#n> {
+@value interface BlockerPolicy<#n|#id|> {
   getChildren (#n,KVReader<#id,DefaultOrder<#id>>) -> (DefaultOrder<#id>)
 }
 
@@ -53,7 +53,7 @@ concrete SelectMax {
 }
 
 concrete BlockWithAll<#id> {
-  refines BlockerPolicy<#id,GraphNode<#id>>
+  refines BlockerPolicy<GraphNode<#id>,#id>
   #id immutable
   #id defines Equals<#id>
   #id defines LessThan<#id>
@@ -71,7 +71,7 @@ concrete BlockWithAll<#id> {
 // It would be simple if we somehow made a first that was like `BlockWithAll`.
 
 concrete BlockWithDirect<#id> {
-  refines BlockerPolicy<#id,GraphNode<#id>>
+  refines BlockerPolicy<GraphNode<#id>,#id>
   #id immutable
 
   @type new () -> (#self)
@@ -82,7 +82,7 @@ concrete ComputeBlockers {
     #id immutable
     #id requires Hashed
     #id defines Equals<#id>
-  (DefaultOrder<GraphNode<#id>>,BlockerPolicy<#id,GraphNode<#id>> /*nodes*/) ->
+  (DefaultOrder<GraphNode<#id>>,BlockerPolicy<GraphNode<#id>,#id> /*nodes*/) ->
   (HashedMap<#id,HashedSet<#id>> /*blockedBy*/,HashedMap<#id,DefaultOrder<#id>> /*blockers*/)
 }
 
