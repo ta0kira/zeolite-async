@@ -96,6 +96,7 @@ define TestProgram {
     TestNode node6 <- TestNode.new(6,Vector<TestNode>.new())
     TestNode node7 <- TestNode.new(7,Vector<TestNode>.new()
         .append(node6))
+    TestNode node8 <- TestNode.new(8,Vector<TestNode>.new())
 
     Vector<TestNode> allNodes <- Vector<TestNode>.new()
         .append(node1)
@@ -105,6 +106,7 @@ define TestProgram {
         .append(node5)
         .append(node6)
         .append(node7)
+        .append(node8)
 
     graphTree <- GraphTree<Int>.new(
         `DualGraph:from` allNodes `ComputeBlockers.with` BlockWithAll<Int>.new())

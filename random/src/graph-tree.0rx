@@ -93,12 +93,14 @@ define GraphTreeTraverser {
 
   @value unblockNode (#id) -> ()
   unblockNode (node) {
-    \ candidates.add(node)
-    \ refCounts.remove(node)
-    // NOTE: Don't change `blockedBy` here because we might be in a loop.
-    traverse (getBlockers(node) -> #id child) {
-      $Hidden[node]$
-      \ incrementRefCount(child)
+    if (!candidates.member(node)) {
+      \ candidates.add(node)
+      \ refCounts.remove(node)
+      // NOTE: Don't change `blockedBy` here because we might be in a loop.
+      traverse (getBlockers(node) -> #id child) {
+        $Hidden[node]$
+        \ incrementRefCount(child)
+      }
     }
   }
 
