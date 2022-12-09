@@ -104,24 +104,22 @@ define GraphTreeTraverser {
 
   @value incrementRefCount (#id) -> ()
   incrementRefCount (node) {
-    Int count <- 1
     scoped {
       optional Int existing <- refCounts.get(node)
     } in if (`present` existing) {
-      count <- count+require(existing)
+      \ node `refCounts.set` (require(existing)+1)
+    } else {
+      \ node `refCounts.set` 1
     }
-    \ node `refCounts.set` count
   }
 
   @value decrementRefCount (#id) -> ()
   decrementRefCount (node) {
-    Int count <- 0
     scoped {
       optional Int existing <- refCounts.get(node)
     } in if (`present` existing) {
-      count <- require(existing)-1
+      \ node `refCounts.set` (require(existing)-1)
     }
-    \ node `refCounts.set` count
   }
 
   @value computeWeights () -> (ReadAt<#id>,ReadAt<Float>)

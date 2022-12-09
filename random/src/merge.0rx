@@ -18,15 +18,7 @@ define MergePresorted {
       scoped {
         optional Order<#x> first <- values.defaultOrder()
       } in if (`present` first) {
-        #x value <- require(first).get()
-        // NOTE: It's not safe to call `next()` twice!
-        optional Order<#x> next <- require(first).next()
-        if (! `present` queue.get(value)) {
-          \ value `queue.set` Vector<Order<#x>>.new()
-        }
-        if (`present` next) {
-          \ require(queue.get(value)).append(`require` next)
-        }
+        \ `require` first `addTo` queue
       }
     }
     $Hidden[children]$
@@ -36,24 +28,25 @@ define MergePresorted {
     //    a. Make sure it exists in the queue.
     //    b. If it has its own next, add that to the corresponding nexts.
     while (queue.size() > 0) {
-      KeyValue<#x,Vector<Order<#x>>> keyValue <- require(queue.defaultOrder()).get()
-      #x nextValue <- keyValue.getKey()
-      DefaultOrder<Order<#x>> nexts <- keyValue.getValue()
-      \ require(nextValue `queue.swap` empty)
+      #x nextValue <- require(queue.defaultOrder()).get().getKey()
+      DefaultOrder<Order<#x>> nexts <- require(nextValue `queue.swap` empty)
       \ output.append(nextValue)
-      $Hidden[keyValue,nextValue]$
+      $Hidden[nextValue]$
       traverse (nexts.defaultOrder() -> Order<#x> oldNext) {
-        #x value <- require(oldNext).get()
-        // NOTE: It's not safe to call `next()` twice!
-        optional Order<#x> next <- require(oldNext).next()
-        $Hidden[oldNext]$
-        if (! `present` queue.get(value)) {
-          \ value `queue.set` Vector<Order<#x>>.new()
-        }
-        if (`present` next) {
-          \ require(queue.get(value)).append(`require` next)
-        }
+        \ oldNext `addTo` queue
       }
+    }
+  }
+
+  @category addTo<#x> (Order<#x>,SortedMap<#x,Vector<Order<#x>>>) -> ()
+  addTo (iterator,queue) {
+    #x value <- iterator.get()
+    optional Order<#x> next <- iterator.next()
+    if (! `present` queue.get(value)) {
+      \ value `queue.set` Vector<Order<#x>>.new()
+    }
+    if (`present` next) {
+      \ require(queue.get(value)).append(`require` next)
     }
   }
 }
