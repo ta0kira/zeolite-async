@@ -49,7 +49,7 @@ define TestProgram {
 
   @type runTreeTest () -> ()
   runTreeTest () {
-    SizedNode<Int> root <- TestBinaryNode.constructWithLimit(7)
+    SizedNode<Int> root <- TestBinaryNode.constructWithSize(9)
     Generator<Float> random <- RandomUniform.probability().setSeed(Realtime.monoSeconds().asInt())
 
     Int count <- 1000
@@ -184,7 +184,7 @@ concrete TestBinaryNode {
   immutable
   refines SizedNode<Int>
 
-  @type constructWithLimit (Int) -> (#self)
+  @type constructWithSize (Int) -> (#self)
 }
 
 define TestBinaryNode {
@@ -193,7 +193,7 @@ define TestBinaryNode {
   @value optional #self left
   @value optional #self right
 
-  constructWithLimit (limit) {
+  constructWithSize (limit) {
     return build(limit,0)
   }
 
@@ -203,7 +203,7 @@ define TestBinaryNode {
     optional #self left <- empty
     scoped {
       Int leftValue <- (value << 1)+1
-    } in if (leftValue <= limit) {
+    } in if (leftValue < limit) {
       $Hidden[value]$
       left <- build(limit,leftValue)
       size <- size+require(left).getSize()
@@ -212,7 +212,7 @@ define TestBinaryNode {
     optional #self right <- empty
     scoped {
       Int rightValue <- (value << 1)+2
-    } in if (rightValue <= limit) {
+    } in if (rightValue < limit) {
       $Hidden[value]$
       right <- build(limit,rightValue)
       size <- size+require(right).getSize()
