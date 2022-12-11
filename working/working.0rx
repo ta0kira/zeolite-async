@@ -66,7 +66,7 @@ define TestProgram {
       DefaultOrder<WeightedNode<Int>> weightedNodes <- ExampleGraphBuilder<Int>.from(`DualGraph:from` allNodes)
       scoped {
         optional Int nextId <- empty
-        GraphTraverser<Int> traverser <-ExampleTraverser<Int>.from(weightedNodes,selector)
+        GraphTraverser<Int> traverser <- weightedNodes `ExampleTraverser<Int>.with` selector
       } in while (`present` (nextId <- traverser.nextNode())) {
         \ BasicOutput.stdout()
             .write(`require` nextId)

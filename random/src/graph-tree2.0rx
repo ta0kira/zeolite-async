@@ -157,13 +157,12 @@ define ExampleTraverser {
   $ReadOnlyExcept[]$
 
   refines Append<WeightedNode<#id>>
-
   refines GraphTraverser<#id>
 
   @value HashedMap<#id,WeightedNode<#id>> candidates
   @value IndexSelector selector
 
-  from (source,selector) {
+  with (source,selector) {
     #self traverser <- #self{ HashedMap<#id,WeightedNode<#id>>.new(), selector }
     traverse (source.defaultOrder() -> WeightedNode<#id> node) {
       \ traverser.append(node)
@@ -203,6 +202,47 @@ define ExampleTraverser {
 
   @value consumeNode (#id) -> ()
   consumeNode (id) {
+    \ require(id `candidates.swap` empty).disownChildren(self)
+  }
+}
+
+define ExampleTraverser2 {
+  $ReadOnlyExcept[]$
+
+  refines Append<SizedNode<#id>>
+  refines GraphTraverser<#id>
+
+  @value SortedMap<#id,SizedNode<#id>> candidates
+  @value CategoricalTree<#id> weights
+  @value RandomCategorical<#id> randomizer
+
+  with (root,random) {
+    CategoricalTree<#id> weights <- CategoricalTree<#id>.new()
+    return #self{
+        SortedMap<#id,SizedNode<#id>>.new(),
+        weights,
+        weights `RandomCategorical:sampleWith` random
+    }.append(root)
+  }
+
+  append (node) {
+    \ node.getId() `candidates.set` node
+    \ node.getId() `weights.setWeight` node.getSize()
+    return self
+  }
+
+  nextNode () {
+    if (randomizer.isEmpty()) {
+      return empty
+    }
+    #id next <- randomizer.generate()
+    \ consumeNode(next)
+    return next
+  }
+
+  @value consumeNode (#id) -> ()
+  consumeNode (id) {
+    \ id `weights.setWeight` 0
     \ require(id `candidates.swap` empty).disownChildren(self)
   }
 }
