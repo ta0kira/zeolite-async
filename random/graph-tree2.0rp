@@ -1,0 +1,25 @@
+@value interface WeightedNode<#id> {
+  getId () -> (#id)
+
+  // Total weight including self.
+  getWeight () -> (Float)
+
+  // Appends children that are no longer blocked.
+  disownChildren (Append<WeightedNode<#id>>) -> (#self)
+}
+
+concrete ExampleGraphBuilder<#id> {
+  #id immutable
+  #id requires Hashed
+  #id defines Equals<#id>
+
+  @type from (DefaultOrder<GraphNode<#id>>) -> (DefaultOrder<WeightedNode<#id>>)
+}
+
+concrete ExampleTraverser<#id> {
+  #id immutable
+  #id requires Hashed
+  #id defines Equals<#id>
+
+  @type from (DefaultOrder<WeightedNode<#id>>,IndexSelector) -> (GraphTraverser<#id>)
+}

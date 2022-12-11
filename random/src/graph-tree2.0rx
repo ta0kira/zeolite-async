@@ -1,0 +1,208 @@
+concrete ExampleNode<#id> {
+  refines WeightedNode<#id>
+
+  #id immutable
+  #id requires Hashed
+  #id defines Equals<#id>
+
+  @type new (#id,DefaultOrder<ExampleNode<#id>>) -> (#self)
+  @value addParent (#id,DualNode<#id>) -> (#self)
+  @value isBlocked () -> (Bool)
+  @value invalidate () -> ()
+}
+
+define ExampleNode {
+  $ReadOnlyExcept[totalWeight,weightIsValid]$
+
+  @value #id                            id
+  @value HashedMap<#id,DualNode<#id>>   parents
+  @value DefaultOrder<ExampleNode<#id>> children
+  @value Float                          totalWeight
+  @value Bool                           weightIsValid
+
+  new (id,children) {
+    return #self{ id, HashedMap<#id,DualNode<#id>>.new(), children, 0.0, false }
+  }
+
+  addParent (parentId,parent) {
+    \ parentId `parents.set` parent
+    return self
+  }
+
+  isBlocked () {
+    return parents.size() > 0
+  }
+
+  invalidate () {
+    // Skip recursion if it's already happened.
+    if (weightIsValid) {
+      weightIsValid <- false
+      traverse (parents.valueOrder() -> DualNode<#id> parent) {
+        \ parent.invalidate()
+      }
+    }
+  }
+
+  getId () {
+    return id
+  }
+
+  getWeight () {
+    if (!weightIsValid) {
+      totalWeight <- 1.0
+      traverse (children.defaultOrder() -> ExampleNode<#id> child) {
+        totalWeight <- totalWeight+child.getPartialWeight()
+      }
+      weightIsValid <- true
+    }
+    return totalWeight
+  }
+
+  disownChildren (unblocked) {
+    traverse (children.defaultOrder() -> ExampleNode<#id> child) {
+      \ child.removeParent(getId())
+      if (!child.isBlocked()) {
+        \ unblocked.append(child)
+      }
+    }
+    return self
+  }
+
+  @value getPartialWeight () -> (Float)
+  getPartialWeight () {
+    return getWeight()/parents.size().asFloat()
+  }
+
+  @value removeParent (#id) -> (#self)
+  removeParent (parentId) {
+    if (`present` parents.swap(parentId,empty)) {
+      // NOTE: This node remains valid because its children haven't changed.
+      traverse (parents.valueOrder() -> DualNode<#id> parent) {
+        \ parent.invalidate()
+      }
+    }
+    return self
+  }
+}
+
+concrete DualNode<#id> {
+  @type new (ExampleNode<#id>) -> (DualNode<#id>)
+  @value invalidate () -> ()
+}
+
+define DualNode {
+  @value weak ExampleNode<#id> node
+
+  new (node) {
+    return #self{ node }
+  }
+
+  invalidate () {
+    scoped {
+      optional ExampleNode<#id> node2 <- `strong` node
+    } in if (`present` node2) {
+      \ require(node2).invalidate()
+    }
+  }
+}
+
+define ExampleGraphBuilder {
+  @value HashedMap<#id,ExampleNode<#id>> nodes
+
+  from (sources) {
+    return #self{ HashedMap<#id,ExampleNode<#id>>.new() }.processAll(sources).getNodes()
+  }
+
+  @value processAll (DefaultOrder<GraphNode<#id>>) -> (#self)
+  processAll (sources) {
+    traverse (sources.defaultOrder() -> GraphNode<#id> source) {
+      \ process(source)
+    }
+    return self
+  }
+
+  @value process (GraphNode<#id>) -> (ExampleNode<#id>)
+  process (source) (node) {
+    scoped {
+      optional ExampleNode<#id> existing <- nodes.get(source.getId())
+    } in if (`present` existing) {
+      node <- `require` existing
+    } else {
+      Vector<ExampleNode<#id>> children <- Vector<ExampleNode<#id>>.new()
+      traverse (source.outgoing().defaultOrder() -> GraphNode<#id> child) {
+        \ children.append(process(child))
+      }
+      node <- ExampleNode<#id>.new(source.getId(),children)
+      \ node.getId() `nodes.set` node
+      DualNode<#id> dual <- DualNode<#id>.new(node)
+      traverse (children.defaultOrder() -> ExampleNode<#id> child) {
+        \ child.addParent(node.getId(),dual)
+      }
+    }
+  }
+
+  @value getNodes () -> (DefaultOrder<ExampleNode<#id>>)
+  getNodes () {
+    Vector<ExampleNode<#id>> unblocked <- Vector<ExampleNode<#id>>.new()
+    traverse (nodes.valueOrder() -> ExampleNode<#id> node) {
+      if (!node.isBlocked()) {
+        \ unblocked.append(node)
+      }
+    }
+    return unblocked
+  }
+}
+
+define ExampleTraverser {
+  $ReadOnlyExcept[]$
+
+  refines Append<WeightedNode<#id>>
+
+  refines GraphTraverser<#id>
+
+  @value HashedMap<#id,WeightedNode<#id>> candidates
+  @value IndexSelector selector
+
+  from (source,selector) {
+    #self traverser <- #self{ HashedMap<#id,WeightedNode<#id>>.new(), selector }
+    traverse (source.defaultOrder() -> WeightedNode<#id> node) {
+      \ traverser.append(node)
+    }
+    return traverser
+  }
+
+  nextNode () {
+    if (candidates.size() == 0) {
+      return empty
+    }
+    #id next <- defer
+    if (candidates.size() == 1) {
+      next <- require(candidates.defaultOrder()).get().getKey()
+    } else {
+      next <- chooseRandom()
+    }
+    \ consumeNode(next)
+    return next
+  }
+
+  append (node) {
+    \ node.getId() `candidates.set` node
+    return self
+  }
+
+  @value chooseRandom () -> (#id)
+  chooseRandom () {
+    Vector<#id> ids       <- Vector<#id>.new()
+    Vector<Float> weights <- Vector<Float>.new()
+    traverse (candidates.defaultOrder() -> KeyValue<#id,WeightedNode<#id>> node) {
+      \ ids.append(node.getKey())
+      \ weights.append(node.getValue().getWeight())
+    }
+    return ids.readAt(`selector.selectFrom` weights)
+  }
+
+  @value consumeNode (#id) -> ()
+  consumeNode (id) {
+    \ require(id `candidates.swap` empty).disownChildren(self)
+  }
+}

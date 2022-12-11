@@ -47,11 +47,11 @@ define TestProgram {
 
   @type runGraphTest () -> ()
   runGraphTest () {
-    GraphTree<Int> graphTree <- defer
+    DefaultOrder<GraphNode<Int>> allNodes <- defer
     if (Argv.global().readAt(1) == "small") {
-      graphTree <- constructSmall()
+      allNodes <- constructSmall()
     } else {
-      graphTree <- `constructLarge` ParseChars.int(Argv.global().readAt(1)).getValue()
+      allNodes <- `constructLarge` ParseChars.int(Argv.global().readAt(1)).getValue()
     }
 
     Int count <- 1000
@@ -60,11 +60,13 @@ define TestProgram {
     }
 
     Generator<Float> random <- RandomUniform.probability().setSeed(Realtime.monoSeconds().asInt())
+    IndexSelector selector <- SelectRandomWeighted.with(random)
 
     traverse (`Counter.zeroIndexed` count -> Int i) {
+      DefaultOrder<WeightedNode<Int>> weightedNodes <- ExampleGraphBuilder<Int>.from(`DualGraph:from` allNodes)
       scoped {
         optional Int nextId <- empty
-        GraphTraverser<Int> traverser <-graphTree.newTraverser(SelectRandomWeighted.with(random))
+        GraphTraverser<Int> traverser <-ExampleTraverser<Int>.from(weightedNodes,selector)
       } in while (`present` (nextId <- traverser.nextNode())) {
         \ BasicOutput.stdout()
             .write(`require` nextId)
@@ -81,7 +83,7 @@ define TestProgram {
     }
   }
 
-  @type constructSmall () -> (GraphTree<Int>)
+  @type constructSmall () -> (DefaultOrder<GraphNode<Int>>)
   constructSmall () (graphTree) {
     TestNode node1 <- TestNode.new(1,Vector<TestNode>.new())
     TestNode node2 <- TestNode.new(2,Vector<TestNode>.new())
@@ -108,18 +110,16 @@ define TestProgram {
         .append(node7)
         .append(node8)
 
-    graphTree <- GraphTree<Int>.new(
-        `DualGraph:from` allNodes `ComputeBlockers.with` BlockWithAll<Int>.new())
+    return allNodes
   }
 
-  @type constructLarge (Int) -> (GraphTree<Int>)
+  @type constructLarge (Int) -> (DefaultOrder<GraphNode<Int>>)
   constructLarge (size) (graphTree) {
     Vector<TestNode> allNodes <- Vector<TestNode>.new()
     traverse (Counter.zeroIndexed(size) -> Int id) {
       \ allNodes.append(TestNode.new(id,allNodes.duplicate()))
     }
-    graphTree <- GraphTree<Int>.new(
-        `DualGraph:from` allNodes `ComputeBlockers.with` BlockWithAll<Int>.new())
+    return allNodes
   }
 }
 
