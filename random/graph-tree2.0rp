@@ -2,14 +2,11 @@
   getId () -> (#id)
 
   // Appends children that are no longer blocked.
-  disownChildren (Append<TraversalNode<#id>>) -> (#self)
+  disownChildren (Append<#self>) -> (#self)
 }
 
 @value interface WeightedNode<|#id> {
   refines TraversalNode<#id>
-
-  // Override type.
-  disownChildren (Append<WeightedNode<#id>>) -> (#self)
 
   // Total weight including self.
   getWeight () -> (Float)
@@ -17,9 +14,6 @@
 
 @value interface SizedNode<|#id> {
   refines TraversalNode<#id>
-
-  // Override type.
-  disownChildren (Append<SizedNode<#id>>) -> (#self)
 
   // Total size including self.
   getSize () -> (Int)
@@ -38,6 +32,7 @@ concrete ExampleTraverser<#id> {
   #id requires Hashed
   #id defines Equals<#id>
 
+  // Complexity: max{ O(VE), O(V^2) }
   @type with (DefaultOrder<WeightedNode<#id>>,IndexSelector) -> (GraphTraverser<#id>)
 }
 
@@ -46,5 +41,6 @@ concrete ExampleTraverser2<#id> {
   #id defines Equals<#id>
   #id defines LessThan<#id>
 
+  // Complexity: O(V log V)
   @type with (SizedNode<#id>,Generator<Float>) -> (GraphTraverser<#id>)
 }

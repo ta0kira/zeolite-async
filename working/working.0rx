@@ -9,11 +9,13 @@ define TestProgram {
 
   run () {
     if (Argv.global().size() < 2 || Argv.global().size() > 3) {
-      fail(Argv.global().readAt(0) + " \"async\" | (\"small\"||[size]) (count)")
+      fail(Argv.global().readAt(0) + " \"async\" | (\"small\"|\"tree\"|[size]) (count)")
     }
 
     if (Argv.global().readAt(1) == "async") {
       \ runAsyncTest()
+    } elif (Argv.global().readAt(1) == "tree") {
+      \ runTreeTest()
     } else {
       \ runGraphTest()
     }
@@ -43,6 +45,36 @@ define TestProgram {
         .write(status.getValue())
         .write("\n")
         .flush()
+  }
+
+  @type runTreeTest () -> ()
+  runTreeTest () {
+    SizedNode<Int> root <- TestBinaryNode.constructWithLimit(7)
+    Generator<Float> random <- RandomUniform.probability().setSeed(Realtime.monoSeconds().asInt())
+
+    Int count <- 1000
+    if (Argv.global().size() >= 3) {
+      count <- ParseChars.int(Argv.global().readAt(2)).getValue()
+    }
+
+    traverse (`Counter.zeroIndexed` count -> Int i) {
+      scoped {
+        optional Int nextId <- empty
+        GraphTraverser<Int> traverser <- root `ExampleTraverser2<Int>.with` random
+      } in while (`present` (nextId <- traverser.nextNode())) {
+        \ BasicOutput.stdout()
+            .write(`require` nextId)
+            .write(" ")
+            .flush()
+      }
+      \ BasicOutput.stdout()
+          .write("\n")
+          .flush()
+      \ BasicOutput.stderr()
+          .write(i)
+          .write("\n")
+          .flush()
+    }
   }
 
   @type runGraphTest () -> ()
@@ -85,22 +117,22 @@ define TestProgram {
 
   @type constructSmall () -> (DefaultOrder<GraphNode<Int>>)
   constructSmall () (graphTree) {
-    TestNode node1 <- TestNode.new(1,Vector<TestNode>.new())
-    TestNode node2 <- TestNode.new(2,Vector<TestNode>.new())
-    TestNode node3 <- TestNode.new(3,Vector<TestNode>.new()
+    TestGraphNode node1 <- TestGraphNode.new(1,Vector<TestGraphNode>.new())
+    TestGraphNode node2 <- TestGraphNode.new(2,Vector<TestGraphNode>.new())
+    TestGraphNode node3 <- TestGraphNode.new(3,Vector<TestGraphNode>.new()
         .append(node1)
         .append(node2))
-    TestNode node4 <- TestNode.new(4,Vector<TestNode>.new()
+    TestGraphNode node4 <- TestGraphNode.new(4,Vector<TestGraphNode>.new()
         .append(node1)
         .append(node3))
-    TestNode node5 <- TestNode.new(5,Vector<TestNode>.new()
+    TestGraphNode node5 <- TestGraphNode.new(5,Vector<TestGraphNode>.new()
         .append(node1))
-    TestNode node6 <- TestNode.new(6,Vector<TestNode>.new())
-    TestNode node7 <- TestNode.new(7,Vector<TestNode>.new()
+    TestGraphNode node6 <- TestGraphNode.new(6,Vector<TestGraphNode>.new())
+    TestGraphNode node7 <- TestGraphNode.new(7,Vector<TestGraphNode>.new()
         .append(node6))
-    TestNode node8 <- TestNode.new(8,Vector<TestNode>.new())
+    TestGraphNode node8 <- TestGraphNode.new(8,Vector<TestGraphNode>.new())
 
-    Vector<TestNode> allNodes <- Vector<TestNode>.new()
+    Vector<TestGraphNode> allNodes <- Vector<TestGraphNode>.new()
         .append(node1)
         .append(node2)
         .append(node3)
@@ -115,25 +147,25 @@ define TestProgram {
 
   @type constructLarge (Int) -> (DefaultOrder<GraphNode<Int>>)
   constructLarge (size) (graphTree) {
-    Vector<TestNode> allNodes <- Vector<TestNode>.new()
+    Vector<TestGraphNode> allNodes <- Vector<TestGraphNode>.new()
     traverse (Counter.zeroIndexed(size) -> Int id) {
-      \ allNodes.append(TestNode.new(id,allNodes.duplicate()))
+      \ allNodes.append(TestGraphNode.new(id,allNodes.duplicate()))
     }
     return allNodes
   }
 }
 
-concrete TestNode {
+concrete TestGraphNode {
   refines GraphNode<Int>
 
-  @type new (Int,DefaultOrder<TestNode>) -> (#self)
+  @type new (Int,DefaultOrder<TestGraphNode>) -> (#self)
 }
 
-define TestNode {
+define TestGraphNode {
   $ReadOnly[id,outgoing]$
 
   @value Int id
-  @value DefaultOrder<TestNode> outgoing
+  @value DefaultOrder<TestGraphNode> outgoing
 
   new (id,outgoing) {
     return #self{ id, outgoing }
@@ -145,5 +177,65 @@ define TestNode {
 
   outgoing () {
     return outgoing
+  }
+}
+
+concrete TestBinaryNode {
+  immutable
+  refines SizedNode<Int>
+
+  @type constructWithLimit (Int) -> (#self)
+}
+
+define TestBinaryNode {
+  @value Int value
+  @value Int size
+  @value optional #self left
+  @value optional #self right
+
+  constructWithLimit (limit) {
+    return build(limit,0)
+  }
+
+  @type build (Int,Int) -> (#self)
+  build (limit,value) {
+    Int size <- 1
+    optional #self left <- empty
+    scoped {
+      Int leftValue <- (value << 1)+1
+    } in if (leftValue <= limit) {
+      $Hidden[value]$
+      left <- build(limit,leftValue)
+      size <- size+require(left).getSize()
+    }
+    $ReadOnly[left]$
+    optional #self right <- empty
+    scoped {
+      Int rightValue <- (value << 1)+2
+    } in if (rightValue <= limit) {
+      $Hidden[value]$
+      right <- build(limit,rightValue)
+      size <- size+require(right).getSize()
+    }
+    $ReadOnly[right]$
+    return #self{ value, size, left, right }
+  }
+
+  getId () {
+    return value
+  }
+
+  disownChildren (unblocked) {
+    if (`present` left) {
+      \ unblocked.append(`require` left)
+    }
+    if (`present` right) {
+      \ unblocked.append(`require` right)
+    }
+    return self
+  }
+
+  getSize () {
+    return size
   }
 }
