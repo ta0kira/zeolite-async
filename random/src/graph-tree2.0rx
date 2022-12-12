@@ -182,11 +182,20 @@ define WeightedTraverser {
   refines Append<WeightedNode<#id>>
   refines GraphTraverser<#id>
 
+  @value Bool traverseAll
   @value Vector<WeightedNode<#id>> candidates
   @value IndexSelector selector
 
-  with (source,selector) {
-    WeightedTraverser<#id> traverser <- WeightedTraverser<#id>{ Vector<WeightedNode<#id>>.new(), selector }
+  allWith (source,selector) {
+    WeightedTraverser<#id> traverser <- WeightedTraverser<#id>{ true, Vector<WeightedNode<#id>>.new(), selector }
+    traverse (source.defaultOrder() -> WeightedNode<#id> node) {
+      \ traverser.append(node)
+    }
+    return traverser
+  }
+
+  pathWith (source,selector) {
+    WeightedTraverser<#id> traverser <- WeightedTraverser<#id>{ false, Vector<WeightedNode<#id>>.new(), selector }
     traverse (source.defaultOrder() -> WeightedNode<#id> node) {
       \ traverser.append(node)
     }
@@ -203,7 +212,11 @@ define WeightedTraverser {
     } else {
       next <- chooseRandom()
     }
-    \ consumeNode(next)
+    if (traverseAll) {
+      \ consumeNodeForAll(next)
+    } else {
+      \ consumeNodeForPath(next)
+    }
     return next
   }
 
@@ -221,8 +234,8 @@ define WeightedTraverser {
     return candidates.readAt(`selector.selectFrom` weights).getId()
   }
 
-  @value consumeNode (#id) -> ()
-  consumeNode (id) {
+  @value consumeNodeForAll (#id) -> ()
+  consumeNodeForAll (id) {
     optional WeightedNode<#id> consumed <- empty
     scoped {
       Bool shiftDown <- false
@@ -244,6 +257,25 @@ define WeightedTraverser {
       \ require(consumed).disownChildren(self)
     }
   }
+
+  @value consumeNodeForPath (#id) -> ()
+  consumeNodeForPath (id) {
+    optional WeightedNode<#id> consumed <- empty
+    traverse (Counter.revZeroIndexed(candidates.size()) -> Int index) {
+      scoped {
+        WeightedNode<#id> node <- candidates.readAt(index)
+      } in if (node.getId() `#id.equals` id) {
+        consumed <- node
+      } else {
+        \ node.disownChildren(DiscardOutput.default())
+      }
+    } update {
+      \ candidates.pop()
+    }
+    if (`present` consumed) {
+      \ require(consumed).disownChildren(self)
+    }
+  }
 }
 
 define TreeTraverser {
@@ -252,13 +284,25 @@ define TreeTraverser {
   refines Append<SizedNode<#id>>
   refines GraphTraverser<#id>
 
+  @value Bool traverseAll
   @value [KVExchange<#id,SizedNode<#id>>&KVWriter<#id,SizedNode<#id>>] candidates
   @value CategoricalTree<#id> weights
   @value RandomCategorical<#id> randomizer
 
-  with (root,random) {
+  allWith (root,random) {
     CategoricalTree<#id> weights <- CategoricalTree<#id>.new()
     return TreeTraverser<#id>{
+        true,
+        SortedMap<#id,SizedNode<#id>>.new(),
+        weights,
+        weights `RandomCategorical:sampleWith` random
+    }.append(root)
+  }
+
+  pathWith (root,random) {
+    CategoricalTree<#id> weights <- CategoricalTree<#id>.new()
+    return TreeTraverser<#id>{
+        false,
         SortedMap<#id,SizedNode<#id>>.new(),
         weights,
         weights `RandomCategorical:sampleWith` random
@@ -276,13 +320,49 @@ define TreeTraverser {
       return empty
     }
     #id next <- randomizer.generate()
-    \ consumeNode(next)
+    if (traverseAll) {
+      \ consumeNodeForAll(next)
+    } else {
+      \ consumeNodeForPath(next)
+    }
     return next
   }
 
-  @value consumeNode (#id) -> ()
-  consumeNode (id) {
+  @value consumeNodeForAll (#id) -> ()
+  consumeNodeForAll (id) {
     \ id `weights.setWeight` 0
     \ require(id `candidates.swap` empty).disownChildren(self)
   }
+
+  @value consumeNodeForPath (#id) -> ()
+  consumeNodeForPath (id) {
+    optional SizedNode<#id> consumed <- empty
+    while (weights.getTotal() > 0) {
+      scoped {
+        SizedNode<#id> node <- require(weights.locate(0) `candidates.swap` empty)
+        \ node.getId() `weights.setWeight` 0
+      } in if (node.getId() `#id.equals` id) {
+        consumed <- node
+      } else {
+        \ node.disownChildren(DiscardOutput.default())
+      }
+    }
+    if (`present` consumed) {
+      \ require(consumed).disownChildren(self)
+    }
+  }
+}
+
+concrete DiscardOutput {
+  refines Append<any>
+  defines Default
+}
+
+define DiscardOutput {
+  $ReadOnlyExcept[]$
+
+  @category DiscardOutput singleton <- DiscardOutput{ }
+
+  default () { return singleton }
+  append (_) { return self }
 }

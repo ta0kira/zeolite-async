@@ -41,7 +41,13 @@ concrete WeightedTraverser<#id> {
   #id defines Equals<#id>
 
   // Complexity: max{ O(VE), O(V^2) }
-  @category with<#id>
+  @category allWith<#id>
+    #id immutable
+    #id defines Equals<#id>
+  (DefaultOrder<WeightedNode<#id>>,IndexSelector) -> (GraphTraverser<#id>)
+
+  // Complexity: O(VE)
+  @category pathWith<#id>
     #id immutable
     #id defines Equals<#id>
   (DefaultOrder<WeightedNode<#id>>,IndexSelector) -> (GraphTraverser<#id>)
@@ -53,7 +59,14 @@ concrete TreeTraverser<#id> {
   #id defines LessThan<#id>
 
   // Complexity: O(V log V)
-  @category with<#id>
+  @category allWith<#id>
+    #id immutable
+    #id defines Equals<#id>
+    #id defines LessThan<#id>
+  (SizedNode<#id>,Generator<Float>) -> (GraphTraverser<#id>)
+
+  // Complexity: O(V log D) where D is the max node out-degree.
+  @category pathWith<#id>
     #id immutable
     #id defines Equals<#id>
     #id defines LessThan<#id>

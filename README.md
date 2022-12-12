@@ -7,6 +7,9 @@ zeolite -R working
 # Run the test program with a simple graph.
 working/TestProgram small
 
+# Run the test program with a simple tree.
+working/TestProgram tree
+
 # Run the test program with a large fully-connected graph.
 working/TestProgram 500 10
 

@@ -60,7 +60,7 @@ define TestProgram {
     traverse (`Counter.zeroIndexed` count -> Int i) {
       scoped {
         optional Int nextId <- empty
-        GraphTraverser<Int> traverser <- root `TreeTraverser:with` random
+        GraphTraverser<Int> traverser <- root `TreeTraverser:allWith` random
       } in while (`present` (nextId <- traverser.nextNode())) {
         \ BasicOutput.stdout()
             .write(`require` nextId)
@@ -98,7 +98,7 @@ define TestProgram {
       DefaultOrder<WeightedNode<Int>> weightedNodes <- WeightedGraphBuilder:fromHashed(`DualGraph:from` allNodes)
       scoped {
         optional Int nextId <- empty
-        GraphTraverser<Int> traverser <- weightedNodes `WeightedTraverser:with` selector
+        GraphTraverser<Int> traverser <- weightedNodes `WeightedTraverser:allWith` selector
       } in while (`present` (nextId <- traverser.nextNode())) {
         \ BasicOutput.stdout()
             .write(`require` nextId)
