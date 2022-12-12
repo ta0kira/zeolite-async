@@ -183,8 +183,11 @@ define TestGraphNode {
 concrete TestBinaryNode {
   immutable
   refines SizedNode<Int>
+  refines GraphNode<Int>
 
   @type constructWithSize (Int) -> (#self)
+  // Explicit merge from `SizedNode` and `GraphNode`.
+  @value getId () -> (Int)
 }
 
 define TestBinaryNode {
@@ -237,5 +240,20 @@ define TestBinaryNode {
 
   getSize () {
     return size
+  }
+
+  outgoing () {
+    if (`present` left || `present` right) {
+      Vector<#self> children <- Vector<#self>.new()
+      if (`present` left) {
+        \ children.append(`require` left)
+      }
+      if (`present` right) {
+        \ children.append(`require` right)
+      }
+      return children
+    } else {
+      return AlwaysEmpty.default()
+    }
   }
 }
