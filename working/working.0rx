@@ -60,7 +60,7 @@ define TestProgram {
     traverse (`Counter.zeroIndexed` count -> Int i) {
       scoped {
         optional Int nextId <- empty
-        GraphTraverser<Int> traverser <- root `ExampleTraverser2<Int>.with` random
+        GraphTraverser<Int> traverser <- root `TreeTraverser:with` random
       } in while (`present` (nextId <- traverser.nextNode())) {
         \ BasicOutput.stdout()
             .write(`require` nextId)
@@ -95,10 +95,10 @@ define TestProgram {
     IndexSelector selector <- SelectRandomWeighted.with(random)
 
     traverse (`Counter.zeroIndexed` count -> Int i) {
-      DefaultOrder<WeightedNode<Int>> weightedNodes <- ExampleGraphBuilder<Int>.from(`DualGraph:from` allNodes)
+      DefaultOrder<WeightedNode<Int>> weightedNodes <- WeightedGraphBuilder:fromHashed(`DualGraph:from` allNodes)
       scoped {
         optional Int nextId <- empty
-        GraphTraverser<Int> traverser <- weightedNodes `ExampleTraverser<Int>.with` selector
+        GraphTraverser<Int> traverser <- weightedNodes `WeightedTraverser:with` selector
       } in while (`present` (nextId <- traverser.nextNode())) {
         \ BasicOutput.stdout()
             .write(`require` nextId)

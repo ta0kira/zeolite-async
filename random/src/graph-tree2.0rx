@@ -1,31 +1,30 @@
-concrete ExampleNode<#id> {
+concrete WeightedGraphNode<#id> {
   refines WeightedNode<#id>
 
   #id immutable
-  #id requires Hashed
   #id defines Equals<#id>
 
-  @type new (#id,DefaultOrder<ExampleNode<#id>>) -> (#self)
-  @value addParent (#id,DualNode<#id>) -> (#self)
+  @type new (#id,DefaultOrder<WeightedGraphNode<#id>>) -> (#self)
+  @value addParent (DualGraphNode<#id>) -> (#self)
   @value isBlocked () -> (Bool)
   @value invalidate () -> ()
 }
 
-define ExampleNode {
+define WeightedGraphNode {
   $ReadOnlyExcept[totalWeight,weightIsValid]$
 
-  @value #id                            id
-  @value HashedMap<#id,DualNode<#id>>   parents
-  @value DefaultOrder<ExampleNode<#id>> children
-  @value Float                          totalWeight
-  @value Bool                           weightIsValid
+  @value #id                                  id
+  @value Vector<DualGraphNode<#id>>           parents
+  @value DefaultOrder<WeightedGraphNode<#id>> children
+  @value Float                                totalWeight
+  @value Bool                                 weightIsValid
 
   new (id,children) {
-    return #self{ id, HashedMap<#id,DualNode<#id>>.new(), children, 0.0, false }
+    return #self{ id, Vector<DualGraphNode<#id>>.new(), children, 0.0, false }
   }
 
-  addParent (parentId,parent) {
-    \ parentId `parents.set` parent
+  addParent (parent) {
+    \ `parents.append` parent
     return self
   }
 
@@ -37,7 +36,7 @@ define ExampleNode {
     // Skip recursion if it's already happened.
     if (weightIsValid) {
       weightIsValid <- false
-      traverse (parents.valueOrder() -> DualNode<#id> parent) {
+      traverse (parents.defaultOrder() -> DualGraphNode<#id> parent) {
         \ parent.invalidate()
       }
     }
@@ -50,7 +49,7 @@ define ExampleNode {
   getWeight () {
     if (!weightIsValid) {
       totalWeight <- 1.0
-      traverse (children.defaultOrder() -> ExampleNode<#id> child) {
+      traverse (children.defaultOrder() -> WeightedGraphNode<#id> child) {
         totalWeight <- totalWeight+child.getPartialWeight()
       }
       weightIsValid <- true
@@ -59,7 +58,7 @@ define ExampleNode {
   }
 
   disownChildren (unblocked) {
-    traverse (children.defaultOrder() -> ExampleNode<#id> child) {
+    traverse (children.defaultOrder() -> WeightedGraphNode<#id> child) {
       \ child.removeParent(getId())
       if (!child.isBlocked()) {
         \ unblocked.append(child)
@@ -75,42 +74,66 @@ define ExampleNode {
 
   @value removeParent (#id) -> (#self)
   removeParent (parentId) {
-    if (`present` parents.swap(parentId,empty)) {
-      // NOTE: This node remains valid because its children haven't changed.
-      traverse (parents.valueOrder() -> DualNode<#id> parent) {
+    scoped {
+      Bool shiftDown <- false
+    } cleanup {
+      if (shiftDown) {
+        \ parents.pop()
+      }
+    } in traverse (Counter.zeroIndexed(parents.size()) -> Int index) {
+      scoped {
+        DualGraphNode<#id> parent <- parents.readAt(index)
+      } in if (parent.getId() `#id.equals` parentId) {
+        shiftDown <- true
+      } else {
         \ parent.invalidate()
+        if (shiftDown) {
+          \ (index-1) `parents.writeAt` parent
+        }
       }
     }
     return self
   }
 }
 
-concrete DualNode<#id> {
-  @type new (ExampleNode<#id>) -> (DualNode<#id>)
+concrete DualGraphNode<#id> {
+  @type new (WeightedGraphNode<#id>) -> (DualGraphNode<#id>)
+  @value getId () -> (#id)
   @value invalidate () -> ()
 }
 
-define DualNode {
-  @value weak ExampleNode<#id> node
+define DualGraphNode {
+  $ReadOnlyExcept[]$
+
+  @value #id id
+  @value weak WeightedGraphNode<#id> node
 
   new (node) {
-    return #self{ node }
+    return #self{ node.getId(), node }
+  }
+
+  getId () {
+    return id
   }
 
   invalidate () {
     scoped {
-      optional ExampleNode<#id> node2 <- `strong` node
+      optional WeightedGraphNode<#id> node2 <- `strong` node
     } in if (`present` node2) {
       \ require(node2).invalidate()
     }
   }
 }
 
-define ExampleGraphBuilder {
-  @value HashedMap<#id,ExampleNode<#id>> nodes
+define WeightedGraphBuilder {
+  @value [KVReader<#id,WeightedGraphNode<#id>>&KVWriter<#id,WeightedGraphNode<#id>>&ValueOrder<WeightedGraphNode<#id>>] nodes
 
-  from (sources) {
-    return #self{ HashedMap<#id,ExampleNode<#id>>.new() }.processAll(sources).getNodes()
+  fromHashed (sources) {
+    return WeightedGraphBuilder<#id>{ HashedMap<#id,WeightedGraphNode<#id>>.new() }.processAll(sources).getNodes()
+  }
+
+  fromOrdered (sources) {
+    return WeightedGraphBuilder<#id>{ SortedMap<#id,WeightedGraphNode<#id>>.new() }.processAll(sources).getNodes()
   }
 
   @value processAll (DefaultOrder<GraphNode<#id>>) -> (#self)
@@ -121,30 +144,30 @@ define ExampleGraphBuilder {
     return self
   }
 
-  @value process (GraphNode<#id>) -> (ExampleNode<#id>)
+  @value process (GraphNode<#id>) -> (WeightedGraphNode<#id>)
   process (source) (node) {
     scoped {
-      optional ExampleNode<#id> existing <- nodes.get(source.getId())
+      optional WeightedGraphNode<#id> existing <- nodes.get(source.getId())
     } in if (`present` existing) {
       node <- `require` existing
     } else {
-      Vector<ExampleNode<#id>> children <- Vector<ExampleNode<#id>>.new()
+      Vector<WeightedGraphNode<#id>> children <- Vector<WeightedGraphNode<#id>>.new()
       traverse (source.outgoing().defaultOrder() -> GraphNode<#id> child) {
         \ children.append(process(child))
       }
-      node <- ExampleNode<#id>.new(source.getId(),children)
+      node <- WeightedGraphNode<#id>.new(source.getId(),children)
       \ node.getId() `nodes.set` node
-      DualNode<#id> dual <- DualNode<#id>.new(node)
-      traverse (children.defaultOrder() -> ExampleNode<#id> child) {
-        \ child.addParent(node.getId(),dual)
+      DualGraphNode<#id> dual <- DualGraphNode<#id>.new(node)
+      traverse (children.defaultOrder() -> WeightedGraphNode<#id> child) {
+        \ child.addParent(dual)
       }
     }
   }
 
-  @value getNodes () -> (DefaultOrder<ExampleNode<#id>>)
+  @value getNodes () -> (DefaultOrder<WeightedGraphNode<#id>>)
   getNodes () {
-    Vector<ExampleNode<#id>> unblocked <- Vector<ExampleNode<#id>>.new()
-    traverse (nodes.valueOrder() -> ExampleNode<#id> node) {
+    Vector<WeightedGraphNode<#id>> unblocked <- Vector<WeightedGraphNode<#id>>.new()
+    traverse (nodes.valueOrder() -> WeightedGraphNode<#id> node) {
       if (!node.isBlocked()) {
         \ unblocked.append(node)
       }
@@ -153,17 +176,17 @@ define ExampleGraphBuilder {
   }
 }
 
-define ExampleTraverser {
+define WeightedTraverser {
   $ReadOnlyExcept[]$
 
   refines Append<WeightedNode<#id>>
   refines GraphTraverser<#id>
 
-  @value HashedMap<#id,WeightedNode<#id>> candidates
+  @value Vector<WeightedNode<#id>> candidates
   @value IndexSelector selector
 
   with (source,selector) {
-    #self traverser <- #self{ HashedMap<#id,WeightedNode<#id>>.new(), selector }
+    WeightedTraverser<#id> traverser <- WeightedTraverser<#id>{ Vector<WeightedNode<#id>>.new(), selector }
     traverse (source.defaultOrder() -> WeightedNode<#id> node) {
       \ traverser.append(node)
     }
@@ -176,7 +199,7 @@ define ExampleTraverser {
     }
     #id next <- defer
     if (candidates.size() == 1) {
-      next <- require(candidates.defaultOrder()).get().getKey()
+      next <- candidates.readAt(0).getId()
     } else {
       next <- chooseRandom()
     }
@@ -185,40 +208,57 @@ define ExampleTraverser {
   }
 
   append (node) {
-    \ node.getId() `candidates.set` node
+    \ `candidates.append` node
     return self
   }
 
   @value chooseRandom () -> (#id)
   chooseRandom () {
-    Vector<#id> ids       <- Vector<#id>.new()
     Vector<Float> weights <- Vector<Float>.new()
-    traverse (candidates.defaultOrder() -> KeyValue<#id,WeightedNode<#id>> node) {
-      \ ids.append(node.getKey())
-      \ weights.append(node.getValue().getWeight())
+    traverse (candidates.defaultOrder() -> WeightedNode<#id> node) {
+      \ weights.append(node.getWeight())
     }
-    return ids.readAt(`selector.selectFrom` weights)
+    return candidates.readAt(`selector.selectFrom` weights).getId()
   }
 
   @value consumeNode (#id) -> ()
   consumeNode (id) {
-    \ require(id `candidates.swap` empty).disownChildren(self)
+    optional WeightedNode<#id> consumed <- empty
+    scoped {
+      Bool shiftDown <- false
+    } cleanup {
+      if (shiftDown) {
+        \ candidates.pop()
+      }
+    } in traverse (Counter.zeroIndexed(candidates.size()) -> Int index) {
+      scoped {
+        WeightedNode<#id> node <- candidates.readAt(index)
+      } in if (node.getId() `#id.equals` id) {
+        consumed <- node
+        shiftDown <- true
+      } elif (shiftDown) {
+        \ (index-1) `candidates.writeAt` node
+      }
+    }
+    if (`present` consumed) {
+      \ require(consumed).disownChildren(self)
+    }
   }
 }
 
-define ExampleTraverser2 {
+define TreeTraverser {
   $ReadOnlyExcept[]$
 
   refines Append<SizedNode<#id>>
   refines GraphTraverser<#id>
 
-  @value SortedMap<#id,SizedNode<#id>> candidates
+  @value [KVExchange<#id,SizedNode<#id>>&KVWriter<#id,SizedNode<#id>>] candidates
   @value CategoricalTree<#id> weights
   @value RandomCategorical<#id> randomizer
 
   with (root,random) {
     CategoricalTree<#id> weights <- CategoricalTree<#id>.new()
-    return #self{
+    return TreeTraverser<#id>{
         SortedMap<#id,SizedNode<#id>>.new(),
         weights,
         weights `RandomCategorical:sampleWith` random

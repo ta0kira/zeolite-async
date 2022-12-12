@@ -19,28 +19,43 @@
   getSize () -> (Int)
 }
 
-concrete ExampleGraphBuilder<#id> {
+concrete WeightedGraphBuilder<#id> {
   #id immutable
-  #id requires Hashed
   #id defines Equals<#id>
 
-  @type from (DefaultOrder<GraphNode<#id>>) -> (DefaultOrder<WeightedNode<#id>>)
+  @category fromHashed<#id>
+    #id immutable
+    #id requires Hashed
+    #id defines Equals<#id>
+  (DefaultOrder<GraphNode<#id>>) -> (DefaultOrder<WeightedNode<#id>>)
+
+  @category fromOrdered<#id>
+    #id immutable
+    #id defines Equals<#id>
+    #id defines LessThan<#id>
+  (DefaultOrder<GraphNode<#id>>) -> (DefaultOrder<WeightedNode<#id>>)
 }
 
-concrete ExampleTraverser<#id> {
+concrete WeightedTraverser<#id> {
   #id immutable
-  #id requires Hashed
   #id defines Equals<#id>
 
   // Complexity: max{ O(VE), O(V^2) }
-  @type with (DefaultOrder<WeightedNode<#id>>,IndexSelector) -> (GraphTraverser<#id>)
+  @category with<#id>
+    #id immutable
+    #id defines Equals<#id>
+  (DefaultOrder<WeightedNode<#id>>,IndexSelector) -> (GraphTraverser<#id>)
 }
 
-concrete ExampleTraverser2<#id> {
+concrete TreeTraverser<#id> {
   #id immutable
   #id defines Equals<#id>
   #id defines LessThan<#id>
 
   // Complexity: O(V log V)
-  @type with (SizedNode<#id>,Generator<Float>) -> (GraphTraverser<#id>)
+  @category with<#id>
+    #id immutable
+    #id defines Equals<#id>
+    #id defines LessThan<#id>
+  (SizedNode<#id>,Generator<Float>) -> (GraphTraverser<#id>)
 }
