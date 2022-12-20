@@ -4,23 +4,25 @@ concrete WeightedGraphNode<#id> {
   #id immutable
   #id defines Equals<#id>
 
-  @type new (#id,DefaultOrder<WeightedGraphNode<#id>>) -> (#self)
+  @type new (#id,Vector<WeightedGraphNode<#id>>) -> (#self)
   @value addParent (DualGraphNode<#id>) -> (#self)
   @value isBlocked () -> (Bool)
-  @value invalidate () -> ()
+  @value invalidateSizes () -> ()
+  @value invalidateWeights () -> ()
+  @value getDividedSize () -> (Float)
 }
 
 define WeightedGraphNode {
-  $ReadOnlyExcept[totalWeight,weightIsValid]$
+  $ReadOnlyExcept[totalSize,totalWeight]$
 
-  @value #id                                  id
-  @value Vector<DualGraphNode<#id>>           parents
-  @value DefaultOrder<WeightedGraphNode<#id>> children
-  @value Float                                totalWeight
-  @value Bool                                 weightIsValid
+  @value #id                                              id
+  @value Vector<DualGraphNode<#id>>                       parents
+  @value [DefaultOrder<WeightedGraphNode<#id>>&Container] children
+  @value optional Float                                   totalWeight
+  @value optional Float                                   totalSize
 
   new (id,children) {
-    return #self{ id, Vector<DualGraphNode<#id>>.new(), children, 0.0, false }
+    return #self{ id, Vector<DualGraphNode<#id>>.new(), children, empty, empty }
   }
 
   addParent (parent) {
@@ -32,29 +34,33 @@ define WeightedGraphNode {
     return parents.size() > 0
   }
 
-  invalidate () {
+  invalidateSizes () {
+    $Hidden[totalWeight]$
     // Skip recursion if it's already happened.
-    if (weightIsValid) {
-      weightIsValid <- false
-      traverse (parents.defaultOrder() -> DualGraphNode<#id> parent) {
-        \ parent.invalidate()
+    if (`present` totalSize) {
+      totalSize <- empty
+      traverse (children.defaultOrder() -> WeightedGraphNode<#id> child) {
+        \ child.invalidateSizes()
       }
+      // Change in size means the weight is now invalid.
+      \ invalidateWeights()
+    }
+  }
+
+  invalidateWeights () {
+    $Hidden[totalSize]$
+    // Skip recursion if it's already happened.
+    if (`present` totalWeight) {
+      totalWeight <- empty
+      traverse (parents.defaultOrder() -> DualGraphNode<#id> parent) {
+        \ parent.invalidateWeights()
+      }
+      // NOTE: Don't call `invalidateSizes()` here; it's not symmetric.
     }
   }
 
   getId () {
     return id
-  }
-
-  getWeight () {
-    if (!weightIsValid) {
-      totalWeight <- 1.0
-      traverse (children.defaultOrder() -> WeightedGraphNode<#id> child) {
-        totalWeight <- totalWeight+child.getPartialWeight()
-      }
-      weightIsValid <- true
-    }
-    return totalWeight
   }
 
   disownChildren (unblocked) {
@@ -67,9 +73,43 @@ define WeightedGraphNode {
     return self
   }
 
-  @value getPartialWeight () -> (Float)
-  getPartialWeight () {
-    return getWeight()/parents.size().asFloat()
+  getWeight () {
+    // Recursive down.
+    $Hidden[totalSize,parents]$
+    if (! `present` totalWeight) {
+      Float newWeight <- 1.0
+      traverse (children.defaultOrder() -> WeightedGraphNode<#id> child) {
+        newWeight <- newWeight+getDividedSize()*child.getFractionalWeight()
+      }
+      totalWeight <- newWeight
+    }
+    return `require` totalWeight
+  }
+
+  getDividedSize () {
+    // Divide size evenly among children.
+    return getSize()/children.size().asFloat()
+  }
+
+  @value getSize () -> (Float)
+  getSize () {
+    // Recursive up.
+    $Hidden[totalWeight,children]$
+    if (! `present` totalSize) {
+      Float newSize <- 1.0
+      traverse (parents.defaultOrder() -> DualGraphNode<#id> parent) {
+        newSize <- newSize+parent.getDividedSize()
+      }
+      totalSize <- newSize
+    }
+    return `require` totalSize
+  }
+
+  @value getFractionalWeight () -> (Float)
+  getFractionalWeight () {
+    // Weight is weighted among parents relative to their sizes.
+    // NOTE: Must subtract 1.0 to exclude this node from sum of parent sizes!
+    return getWeight()/(getSize()-1.0)
   }
 
   @value removeParent (#id) -> (#self)
@@ -79,6 +119,7 @@ define WeightedGraphNode {
     } cleanup {
       if (shiftDown) {
         \ parents.pop()
+        \ invalidateSizes()
       }
     } in traverse (Counter.zeroIndexed(parents.size()) -> Int index) {
       scoped {
@@ -86,7 +127,6 @@ define WeightedGraphNode {
       } in if (parent.getId() `#id.equals` parentId) {
         shiftDown <- true
       } else {
-        \ parent.invalidate()
         if (shiftDown) {
           \ (index-1) `parents.writeAt` parent
         }
@@ -99,7 +139,8 @@ define WeightedGraphNode {
 concrete DualGraphNode<#id> {
   @type new (WeightedGraphNode<#id>) -> (DualGraphNode<#id>)
   @value getId () -> (#id)
-  @value invalidate () -> ()
+  @value invalidateWeights () -> ()
+  @value getDividedSize () -> (Float)
 }
 
 define DualGraphNode {
@@ -116,11 +157,21 @@ define DualGraphNode {
     return id
   }
 
-  invalidate () {
+  invalidateWeights () {
     scoped {
       optional WeightedGraphNode<#id> node2 <- `strong` node
     } in if (`present` node2) {
-      \ require(node2).invalidate()
+      \ require(node2).invalidateWeights()
+    }
+  }
+
+  getDividedSize () {
+    scoped {
+      optional WeightedGraphNode<#id> node2 <- `strong` node
+    } in if (`present` node2) {
+      return require(node2).getDividedSize()
+    } else {
+      return 0.0
     }
   }
 }
