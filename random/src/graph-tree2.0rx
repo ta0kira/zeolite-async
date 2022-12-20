@@ -13,13 +13,13 @@ concrete WeightedGraphNode<#id> {
 }
 
 define WeightedGraphNode {
-  $ReadOnlyExcept[totalSize,totalWeight]$
+  $ReadOnlyExcept[sizeMinusSelf,totalWeight]$
 
   @value #id                                              id
   @value Vector<DualGraphNode<#id>>                       parents
   @value [DefaultOrder<WeightedGraphNode<#id>>&Container] children
   @value optional Float                                   totalWeight
-  @value optional Float                                   totalSize
+  @value optional Float                                   sizeMinusSelf
 
   new (id,children) {
     return #self{ id, Vector<DualGraphNode<#id>>.new(), children, empty, empty }
@@ -37,8 +37,8 @@ define WeightedGraphNode {
   invalidateSizes () {
     $Hidden[totalWeight]$
     // Skip recursion if it's already happened.
-    if (`present` totalSize) {
-      totalSize <- empty
+    if (`present` sizeMinusSelf) {
+      sizeMinusSelf <- empty
       traverse (children.defaultOrder() -> WeightedGraphNode<#id> child) {
         \ child.invalidateSizes()
       }
@@ -48,7 +48,7 @@ define WeightedGraphNode {
   }
 
   invalidateWeights () {
-    $Hidden[totalSize]$
+    $Hidden[sizeMinusSelf]$
     // Skip recursion if it's already happened.
     if (`present` totalWeight) {
       totalWeight <- empty
@@ -75,7 +75,7 @@ define WeightedGraphNode {
 
   getWeight () {
     // Recursive down.
-    $Hidden[totalSize,parents]$
+    $Hidden[sizeMinusSelf,parents]$
     if (! `present` totalWeight) {
       Float newWeight <- 1.0
       traverse (children.defaultOrder() -> WeightedGraphNode<#id> child) {
@@ -88,28 +88,29 @@ define WeightedGraphNode {
 
   getDividedSize () {
     // Divide size evenly among children.
-    return getSize()/children.size().asFloat()
+    return (getSizeMinusSelf()+1.0)/children.size().asFloat()
   }
 
-  @value getSize () -> (Float)
-  getSize () {
+  @value getSizeMinusSelf () -> (Float)
+  getSizeMinusSelf () {
     // Recursive up.
     $Hidden[totalWeight,children]$
-    if (! `present` totalSize) {
-      Float newSize <- 1.0
+    if (! `present` sizeMinusSelf) {
+      // We exclude self from size so that we don't need to subtract it later to
+      // get `getFractionalWeight()`, to avoid rounding error.
+      Float newSize <- 0.0
       traverse (parents.defaultOrder() -> DualGraphNode<#id> parent) {
         newSize <- newSize+parent.getDividedSize()
       }
-      totalSize <- newSize
+      sizeMinusSelf <- newSize
     }
-    return `require` totalSize
+    return `require` sizeMinusSelf
   }
 
   @value getFractionalWeight () -> (Float)
   getFractionalWeight () {
     // Weight is weighted among parents relative to their sizes.
-    // NOTE: Must subtract 1.0 to exclude this node from sum of parent sizes!
-    return getWeight()/(getSize()-1.0)
+    return getWeight()/getSizeMinusSelf()
   }
 
   @value removeParent (#id) -> (#self)
