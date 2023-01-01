@@ -10,8 +10,8 @@ working/TestProgram small
 # Run the test program with a simple tree.
 working/TestProgram tree
 
-# Run the test program with a large fully-connected graph.
-working/TestProgram 500 10
+# Run the test program with a simple dual tree.
+working/TestProgram dual
 
 # Run the test program with a graph of interdependent commands.
 working/TestProgram async

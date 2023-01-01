@@ -12,13 +12,6 @@
   getWeight () -> (Float)
 }
 
-@value interface SizedNode<|#id> {
-  refines TraversalNode<#id>
-
-  // Total size including self.
-  getSize () -> (Int)
-}
-
 concrete WeightedGraphBuilder<#id> {
   #id immutable
   #id defines Equals<#id>
@@ -51,24 +44,4 @@ concrete WeightedTraverser<#id> {
     #id immutable
     #id defines Equals<#id>
   (DefaultOrder<WeightedNode<#id>>,IndexSelector) -> (GraphTraverser<#id>)
-}
-
-concrete TreeTraverser<#id> {
-  #id immutable
-  #id defines Equals<#id>
-  #id defines LessThan<#id>
-
-  // Complexity: O(V log V)
-  @category allWith<#id>
-    #id immutable
-    #id defines Equals<#id>
-    #id defines LessThan<#id>
-  (SizedNode<#id>,Generator<Float>) -> (GraphTraverser<#id>)
-
-  // Complexity: O(V log D) where D is the max node out-degree.
-  @category pathWith<#id>
-    #id immutable
-    #id defines Equals<#id>
-    #id defines LessThan<#id>
-  (SizedNode<#id>,Generator<Float>) -> (GraphTraverser<#id>)
 }

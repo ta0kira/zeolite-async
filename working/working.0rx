@@ -5,17 +5,16 @@ concrete TestProgram {
 define TestProgram {
   $ReadOnlyExcept[]$
 
+  @category Formatted failInstructions <- Argv.global().readAt(0) + " \"async\" | (\"small\"|\"tree\"|\"dual\") (count)"
   @category String testProgram <- $ExprLookup[MODULE_PATH]$ + "/test.sh"
 
   run () {
     if (Argv.global().size() < 2 || Argv.global().size() > 3) {
-      fail(Argv.global().readAt(0) + " \"async\" | (\"small\"|\"tree\"|[size]) (count)")
+      fail(failInstructions)
     }
 
     if (Argv.global().readAt(1) == "async") {
       \ runAsyncTest()
-    } elif (Argv.global().readAt(1) == "tree") {
-      \ runTreeTest()
     } else {
       \ runGraphTest()
     }
@@ -47,44 +46,17 @@ define TestProgram {
         .flush()
   }
 
-  @type runTreeTest () -> ()
-  runTreeTest () {
-    SizedNode<Int> root <- TestBinaryNode.constructWithSize(9)
-    Generator<Float> random <- RandomUniform.probability().setSeed(Realtime.monoSeconds().asInt())
-
-    Int count <- 1000
-    if (Argv.global().size() >= 3) {
-      count <- ParseChars.int(Argv.global().readAt(2)).getValue()
-    }
-
-    traverse (`Counter.zeroIndexed` count -> Int i) {
-      scoped {
-        optional Int nextId <- empty
-        GraphTraverser<Int> traverser <- root `TreeTraverser:allWith` random
-      } in while (`present` (nextId <- traverser.nextNode())) {
-        \ BasicOutput.stdout()
-            .write(`require` nextId)
-            .write(" ")
-            .flush()
-      }
-      \ BasicOutput.stdout()
-          .write("\n")
-          .flush()
-      \ BasicOutput.stderr()
-          .write(i)
-          .write("\n")
-          .flush()
-    }
-  }
-
   @type runGraphTest () -> ()
   runGraphTest () {
     DefaultOrder<GraphNode<Int>> allNodes <- defer
     if (Argv.global().readAt(1) == "small") {
-      allNodes <- constructSmall()
-//       allNodes <- `Vector<GraphNode<Int>>.new().append` TestBinaryNode.constructWithSize(9)
+      allNodes <- `DualGraph:from` constructSmall()
+    } elif (Argv.global().readAt(1) == "tree") {
+      allNodes <- `Vector<GraphNode<Int>>.new().append` TestBalancedNode.constructWithSize(9)
+    } elif (Argv.global().readAt(1) == "dual") {
+      allNodes <- `DualGraph:from` `Vector<GraphNode<Int>>.new().append` TestBalancedNode.constructWithSize(9)
     } else {
-      allNodes <- `constructLarge` ParseChars.int(Argv.global().readAt(1)).getValue()
+      fail(failInstructions)
     }
 
     Int count <- 1000
@@ -96,7 +68,7 @@ define TestProgram {
     IndexSelector selector <- SelectRandomWeighted.with(random)
 
     traverse (`Counter.zeroIndexed` count -> Int i) {
-      DefaultOrder<WeightedNode<Int>> weightedNodes <- WeightedGraphBuilder:fromHashed(`DualGraph:from` allNodes)
+      DefaultOrder<WeightedNode<Int>> weightedNodes <- WeightedGraphBuilder:fromHashed(allNodes)
       scoped {
         optional Int nextId <- empty
         GraphTraverser<Int> traverser <- weightedNodes `WeightedTraverser:allWith` selector
@@ -128,10 +100,15 @@ define TestProgram {
         .append(node3))
     TestGraphNode node5 <- TestGraphNode.new(5,Vector<TestGraphNode>.new()
         .append(node1))
-    TestGraphNode node6 <- TestGraphNode.new(6,Vector<TestGraphNode>.new())
+    TestGraphNode node6 <- TestGraphNode.new(6,Vector<TestGraphNode>.new()
+        .append(node3))
     TestGraphNode node7 <- TestGraphNode.new(7,Vector<TestGraphNode>.new()
-        .append(node6))
-    TestGraphNode node8 <- TestGraphNode.new(8,Vector<TestGraphNode>.new())
+        .append(node6)
+        .append(node2))
+    TestGraphNode node8 <- TestGraphNode.new(8,Vector<TestGraphNode>.new()
+        .append(node7))
+    TestGraphNode node9 <- TestGraphNode.new(9,Vector<TestGraphNode>.new()
+        .append(node7))
 
     Vector<TestGraphNode> allNodes <- Vector<TestGraphNode>.new()
         .append(node1)
@@ -142,6 +119,7 @@ define TestProgram {
         .append(node6)
         .append(node7)
         .append(node8)
+        .append(node9)
 
     return allNodes
   }
@@ -181,17 +159,17 @@ define TestGraphNode {
   }
 }
 
-concrete TestBinaryNode {
+concrete TestBalancedNode {
   immutable
-  refines SizedNode<Int>
+  refines TraversalNode<Int>
   refines GraphNode<Int>
 
   @type constructWithSize (Int) -> (#self)
-  // Explicit merge from `SizedNode` and `GraphNode`.
+  // Explicit merge from `TraversalNode` and `GraphNode`.
   @value getId () -> (Int)
 }
 
-define TestBinaryNode {
+define TestBalancedNode {
   @value Int value
   @value Int size
   @value optional #self left
@@ -239,10 +217,6 @@ define TestBinaryNode {
     return self
   }
 
-  getSize () {
-    return size
-  }
-
   outgoing () {
     if (`present` left || `present` right) {
       Vector<#self> children <- Vector<#self>.new()
@@ -256,5 +230,10 @@ define TestBinaryNode {
     } else {
       return AlwaysEmpty.default()
     }
+  }
+
+  @value getSize () -> (Int)
+  getSize () {
+    return size
   }
 }
