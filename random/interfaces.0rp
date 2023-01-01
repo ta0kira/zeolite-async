@@ -1,0 +1,26 @@
+@value interface GraphNode<|#id> {
+  getId () -> (#id)
+  outgoing () -> (DefaultOrder<#self>)
+}
+
+@value interface IndexSelector {
+  selectFrom (ReadAt<Float>) -> (Int)
+}
+
+@value interface GraphTraverser<|#id> {
+  nextNode () -> (optional #id)
+}
+
+@value interface TraversalNode<|#id> {
+  getId () -> (#id)
+
+  // Appends children that are no longer blocked.
+  disownChildren (Append<#self>) -> (#self)
+}
+
+@value interface WeightedNode<|#id> {
+  refines TraversalNode<#id>
+
+  // Total weight including self.
+  getWeight () -> (Float)
+}

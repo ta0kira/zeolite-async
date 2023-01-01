@@ -1,17 +1,3 @@
-@value interface TraversalNode<|#id> {
-  getId () -> (#id)
-
-  // Appends children that are no longer blocked.
-  disownChildren (Append<#self>) -> (#self)
-}
-
-@value interface WeightedNode<|#id> {
-  refines TraversalNode<#id>
-
-  // Total weight including self.
-  getWeight () -> (Float)
-}
-
 concrete WeightedGraphBuilder<#id> {
   #id immutable
   #id defines Equals<#id>

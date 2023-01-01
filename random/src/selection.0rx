@@ -1,0 +1,55 @@
+define SelectRandomWeighted {
+  @value Generator<Float> random
+
+  with (random) {
+    return #self{ random }
+  }
+
+  selectFrom (candidates) {
+    Float total <- 0.0
+    traverse (Counter.zeroIndexed(candidates.size()) -> Int index) {
+      total <- total+candidates.readAt(index)
+    }
+    Float value <- random.generate()*total
+    $Hidden[total]$
+    traverse (Counter.zeroIndexed(candidates.size()) -> Int index) {
+      if (value < candidates.readAt(index)) {
+        return index
+      } else {
+        value <- value-candidates.readAt(index)
+      }
+    }
+    // In case rounding errors push `value` past the end.
+    return candidates.size()-1
+  }
+}
+
+define SelectRandomUniform {
+  @value Generator<Float> random
+
+  with (random) {
+    return #self{ random }
+  }
+
+  selectFrom (candidates) {
+    return (random.generate()*candidates.size().asFloat()).asInt() `Ranges:min` (candidates.size()-1)
+  }
+}
+
+define SelectMax {
+  new () {
+    return #self{ }
+  }
+
+  selectFrom (candidates) (chosen) {
+    chosen <- candidates.size()-1
+    Float max <- 0.0
+    traverse (Counter.zeroIndexed(candidates.size()) -> Int index) {
+      $ReadOnly[index]$
+      if (candidates.readAt(index) > max) {
+        chosen <- index
+        max <- candidates.readAt(index)
+      }
+    }
+  }
+}

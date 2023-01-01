@@ -1,0 +1,42 @@
+define DualGraph {
+  $ReadOnlyExcept[]$
+
+  refines GraphNode<#id>
+
+  @value #id id
+  @value Vector<DualGraph<#id>> outgoing
+
+  getId () {
+    return id
+  }
+
+  outgoing () {
+    return outgoing
+  }
+
+  from (nodes) {
+    HashedMap<#id,DualGraph<#id>> parents <- HashedMap<#id,DualGraph<#id>>.new()
+    traverse (nodes.defaultOrder() -> GraphNode<#id> node) {
+      \ node `DualGraph<#id>.populateParents` parents
+    }
+    return parents.valueOrder() `OrderH:copyTo` Vector<DualGraph<#id>>.new()
+  }
+
+  @type populateParents (GraphNode<#id>,HashedMap<#id,DualGraph<#id>>) -> ()
+  populateParents (node,parents) {
+    if (`present` parents.get(node.getId())) {
+      return _
+    }
+    DualGraph<#id> dualNode <- #self{ node.getId(), Vector<DualGraph<#id>>.new() }
+    \ node.getId() `parents.set` dualNode
+    traverse (node.outgoing().defaultOrder() -> GraphNode<#id> child) {
+      \ populateParents(child,parents)
+      \ require(parents.get(child.getId())).addParent(dualNode)
+    }
+  }
+
+  @value addParent (DualGraph<#id>) -> ()
+  addParent (parent) {
+    \ outgoing.append(parent)
+  }
+}

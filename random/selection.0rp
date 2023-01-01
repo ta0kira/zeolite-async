@@ -1,0 +1,17 @@
+concrete SelectRandomWeighted {
+  refines IndexSelector
+
+  @type with (Generator<Float>) -> (#self)
+}
+
+concrete SelectRandomUniform {
+  refines IndexSelector
+
+  @type with (Generator<Float>) -> (#self)
+}
+
+concrete SelectMax {
+  refines IndexSelector
+
+  @type new () -> (#self)
+}

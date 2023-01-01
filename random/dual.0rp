@@ -1,0 +1,11 @@
+concrete DualGraph<#id> {
+  #id immutable
+  #id requires Hashed
+  #id defines Equals<#id>
+
+  @category from<#id>
+    #id immutable
+    #id requires Hashed
+    #id defines Equals<#id>
+  (DefaultOrder<GraphNode<#id>>) -> (DefaultOrder<GraphNode<#id>>)
+}
