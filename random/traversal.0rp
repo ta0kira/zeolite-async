@@ -19,13 +19,20 @@ concrete WeightedTraverser<#id> {
   #id immutable
   #id defines Equals<#id>
 
-  // Complexity: max{ O(VE), O(V^2) }
+  // Notes:
+  // - Complexity is max{ O(VE), O(V^2) }.
+  // - Optimal for graphs without undirected cycles, e.g., trees.
+  // - Generally not optimal otherwise.
   @category allWith<#id>
     #id immutable
     #id defines Equals<#id>
   (DefaultOrder<WeightedNode<#id>>,IndexSelector) -> (GraphTraverser<#id>)
 
-  // Complexity: O(VE)
+  // Notes:
+  // - Complexity is O(VE).
+  // - Not optimal.
+  // - Distribution for duals of graphs without undirected cycles (e.g., trees)
+  //   should be isomorphic.
   @category pathWith<#id>
     #id immutable
     #id defines Equals<#id>

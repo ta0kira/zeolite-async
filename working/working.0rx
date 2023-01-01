@@ -5,11 +5,11 @@ concrete TestProgram {
 define TestProgram {
   $ReadOnlyExcept[]$
 
-  @category Formatted failInstructions <- Argv.global().readAt(0) + " \"async\" | (\"small\"|\"tree\"|\"dual\") (count)"
+  @category Formatted failInstructions <- Argv.global().readAt(0) + " \"async\" | [\"small\"|\"tree\"|\"dual\"] (\"all\"|\"path\") (count)"
   @category String testProgram <- $ExprLookup[MODULE_PATH]$ + "/test.sh"
 
   run () {
-    if (Argv.global().size() < 2 || Argv.global().size() > 3) {
+    if (Argv.global().size() < 2 || Argv.global().size() > 4) {
       fail(failInstructions)
     }
 
@@ -48,20 +48,35 @@ define TestProgram {
 
   @type runGraphTest () -> ()
   runGraphTest () {
+    if (Argv.global().size() < 3) {
+      fail(failInstructions)
+    }
+
+    Bool pathOnly <- defer
+    Int treeSize <- defer
+    if (Argv.global().readAt(2) == "all") {
+      pathOnly <- false
+      treeSize <- 9
+    } elif (Argv.global().readAt(2) == "path") {
+      pathOnly <- true
+      treeSize <- 22
+    } else {
+      fail(failInstructions)
+    }
+    Int count <- 1000
+    if (Argv.global().size() >= 4) {
+      count <- ParseChars.int(Argv.global().readAt(3)).getValue()
+    }
+
     DefaultOrder<GraphNode<Int>> allNodes <- defer
     if (Argv.global().readAt(1) == "small") {
       allNodes <- `DualGraph:from` constructSmall()
     } elif (Argv.global().readAt(1) == "tree") {
-      allNodes <- `Vector<GraphNode<Int>>.new().append` TestBalancedNode.constructWithSize(9)
+      allNodes <- `Vector<GraphNode<Int>>.new().append` TestBalancedNode.constructWithSize(treeSize)
     } elif (Argv.global().readAt(1) == "dual") {
-      allNodes <- `DualGraph:from` `Vector<GraphNode<Int>>.new().append` TestBalancedNode.constructWithSize(9)
+      allNodes <- `DualGraph:from` `Vector<GraphNode<Int>>.new().append` TestBalancedNode.constructWithSize(treeSize)
     } else {
       fail(failInstructions)
-    }
-
-    Int count <- 1000
-    if (Argv.global().size() >= 3) {
-      count <- ParseChars.int(Argv.global().readAt(2)).getValue()
     }
 
     Generator<Float> random <- RandomUniform.probability().setSeed(Realtime.monoSeconds().asInt())
@@ -71,7 +86,12 @@ define TestProgram {
       DefaultOrder<WeightedNode<Int>> weightedNodes <- WeightedGraphBuilder:fromHashed(allNodes)
       scoped {
         optional Int nextId <- empty
-        GraphTraverser<Int> traverser <- weightedNodes `WeightedTraverser:allWith` selector
+        GraphTraverser<Int> traverser <- defer
+        if (pathOnly) {
+          traverser <- weightedNodes `WeightedTraverser:pathWith` selector
+        } else {
+          traverser <- weightedNodes `WeightedTraverser:allWith` selector
+        }
       } in while (`present` (nextId <- traverser.nextNode())) {
         \ BasicOutput.stdout()
             .write(`require` nextId)

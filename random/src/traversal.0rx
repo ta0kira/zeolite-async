@@ -276,7 +276,7 @@ define WeightedGraphBuilder {
 }
 
 define WeightedTraverser {
-  $ReadOnlyExcept[]$
+  $ReadOnlyExcept[candidates]$
 
   refines Append<WeightedNode<#id>>
   refines GraphTraverser<#id>
@@ -360,33 +360,22 @@ define WeightedTraverser {
   @value consumeNodeForPath (#id) -> ()
   consumeNodeForPath (id) {
     optional WeightedNode<#id> consumed <- empty
-    traverse (Counter.revZeroIndexed(candidates.size()) -> Int index) {
-      scoped {
-        WeightedNode<#id> node <- candidates.readAt(index)
-      } in if (node.getId() `#id.equals` id) {
+    SimpleQueue<WeightedNode<#id>> queue <- SimpleQueue<WeightedNode<#id>>.new()
+    traverse (candidates.defaultOrder() -> WeightedNode<#id> node) {
+      if (node.getId() `#id.equals` id) {
         consumed <- node
       } else {
-        \ node.disownChildren(DiscardOutput.default())
+        \ `queue.push` node
       }
-    } update {
-      \ candidates.pop()
     }
+    // Recursively prune paths not taken.
+    while (queue.size() > 0) {
+      \ queue.pop().disownChildren(queue)
+    }
+    candidates <- Vector<WeightedNode<#id>>.new()
+    // NOTE: This must come after pruning!
     if (`present` consumed) {
       \ require(consumed).disownChildren(self)
     }
   }
-}
-
-concrete DiscardOutput {
-  refines Append<any>
-  defines Default
-}
-
-define DiscardOutput {
-  $ReadOnlyExcept[]$
-
-  @category DiscardOutput singleton <- DiscardOutput{ }
-
-  default () { return singleton }
-  append (_) { return self }
 }
