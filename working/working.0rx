@@ -82,6 +82,7 @@ define TestProgram {
     DefaultOrder<GraphNode<Int>> allNodes <- defer
     if (Argv.global().readAt(1) == "small") {
       allNodes <- constructSmall()
+//       allNodes <- `Vector<GraphNode<Int>>.new().append` TestBinaryNode.constructWithSize(9)
     } else {
       allNodes <- `constructLarge` ParseChars.int(Argv.global().readAt(1)).getValue()
     }

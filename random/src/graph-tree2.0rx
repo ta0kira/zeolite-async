@@ -4,25 +4,34 @@ concrete WeightedGraphNode<#id> {
   #id immutable
   #id defines Equals<#id>
 
-  @type new (#id,Vector<WeightedGraphNode<#id>>) -> (#self)
+  @type new<#set>
+    #set requires Append<#id>
+    #set requires Container
+    #set requires DefaultOrder<#id>
+    #set defines Default
+  (#id,Vector<WeightedGraphNode<#id>>) -> (#self)
   @value addParent (DualGraphNode<#id>) -> (#self)
   @value isBlocked () -> (Bool)
   @value invalidateSizes () -> ()
   @value invalidateWeights () -> ()
-  @value getDividedSize () -> (Float)
+  @value getSize () -> (Float)
+  @value getFractionalSize () -> (Float)
 }
 
 define WeightedGraphNode {
-  $ReadOnlyExcept[sizeMinusSelf,totalWeight]$
+  $ReadOnlyExcept[size,totalParentsSize,totalWeight,totalChildWeights]$
 
   @value #id                                              id
   @value Vector<DualGraphNode<#id>>                       parents
   @value [DefaultOrder<WeightedGraphNode<#id>>&Container] children
   @value optional Float                                   totalWeight
-  @value optional Float                                   sizeMinusSelf
+  @value optional Float                                   size
+  @value optional Float                                   totalParentsSize
+  @value optional Float                                   totalChildWeights
+  @value [DefaultOrder<#id>&Append<#id>&Container]        uniqueChildren
 
   new (id,children) {
-    return #self{ id, Vector<DualGraphNode<#id>>.new(), children, empty, empty }
+    return #self{ id, Vector<DualGraphNode<#id>>.new(), children, empty, empty, empty, empty, #set.default() }
   }
 
   addParent (parent) {
@@ -37,8 +46,9 @@ define WeightedGraphNode {
   invalidateSizes () {
     $Hidden[totalWeight]$
     // Skip recursion if it's already happened.
-    if (`present` sizeMinusSelf) {
-      sizeMinusSelf <- empty
+    if (`present` size || `present` totalParentsSize) {
+      size             <- empty
+      totalParentsSize <- empty
       traverse (children.defaultOrder() -> WeightedGraphNode<#id> child) {
         \ child.invalidateSizes()
       }
@@ -48,7 +58,7 @@ define WeightedGraphNode {
   }
 
   invalidateWeights () {
-    $Hidden[sizeMinusSelf]$
+    $Hidden[size]$
     // Skip recursion if it's already happened.
     if (`present` totalWeight) {
       totalWeight <- empty
@@ -75,42 +85,78 @@ define WeightedGraphNode {
 
   getWeight () {
     // Recursive down.
-    $Hidden[sizeMinusSelf,parents]$
+    $Hidden[size,parents,totalChildWeights]$
     if (! `present` totalWeight) {
       Float newWeight <- 1.0
       traverse (children.defaultOrder() -> WeightedGraphNode<#id> child) {
-        newWeight <- newWeight+getDividedSize()*child.getFractionalWeight()
+        newWeight <- newWeight+getSize()*child.getFractionalWeight()
       }
       totalWeight <- newWeight
     }
     return `require` totalWeight
   }
 
-  getDividedSize () {
-    // Divide size evenly among children.
-    return (getSizeMinusSelf()+1.0)/children.size().asFloat()
+  getSize () {
+    // Recursive up.
+    $Hidden[totalWeight,children,totalChildWeights]$
+    if (! `present` size) {
+      Float newSize <- 1.0
+      traverse (parents.defaultOrder() -> DualGraphNode<#id> parent) {
+        newSize <- newSize+getSizeWeight()*parent.getFractionalSize()
+      }
+      size <- newSize
+    }
+    return `require` size
   }
 
-  @value getSizeMinusSelf () -> (Float)
-  getSizeMinusSelf () {
-    // Recursive up.
-    $Hidden[totalWeight,children]$
-    if (! `present` sizeMinusSelf) {
-      // We exclude self from size so that we don't need to subtract it later to
-      // get `getFractionalWeight()`, to avoid rounding error.
+  getFractionalSize () {
+    return getSize()/getTotalChildWeights()
+  }
+
+  @value getTotalParentsSize () -> (Float)
+  getTotalParentsSize () {
+    if (! `present` totalParentsSize) {
       Float newSize <- 0.0
       traverse (parents.defaultOrder() -> DualGraphNode<#id> parent) {
-        newSize <- newSize+parent.getDividedSize()
+        newSize <- newSize+parent.getSize()
       }
-      sizeMinusSelf <- newSize
+      totalParentsSize <- newSize
     }
-    return `require` sizeMinusSelf
+    return `require` totalParentsSize
+  }
+
+  @value getUniqueChildren () -> ([DefaultOrder<#id>&Container])
+  getUniqueChildren () {
+    if (uniqueChildren.size() == 0) {
+      \ `uniqueChildren.append` getId()
+      traverse (children.defaultOrder() -> WeightedGraphNode<#id> child) {
+        \ child.getUniqueChildren().defaultOrder() `OrderH:copyTo` uniqueChildren
+      }
+    }
+    return uniqueChildren
+  }
+
+  @value getSizeWeight () -> (Float)
+  getSizeWeight () {
+    return getUniqueChildren().size().asFloat()
+  }
+
+  @value getTotalChildWeights () -> (Float)
+  getTotalChildWeights () {
+    $Hidden[size,parents,totalWeight]$
+    if (! `present` totalChildWeights) {
+      Float newWeight <- 0.0
+      traverse (children.defaultOrder() -> WeightedGraphNode<#id> child) {
+        newWeight <- newWeight+child.getSizeWeight()
+      }
+      totalChildWeights <- newWeight
+    }
+    return `require` totalChildWeights
   }
 
   @value getFractionalWeight () -> (Float)
   getFractionalWeight () {
-    // Weight is weighted among parents relative to their sizes.
-    return getWeight()/getSizeMinusSelf()
+    return getWeight()/getTotalParentsSize()
   }
 
   @value removeParent (#id) -> (#self)
@@ -141,7 +187,8 @@ concrete DualGraphNode<#id> {
   @type new (WeightedGraphNode<#id>) -> (DualGraphNode<#id>)
   @value getId () -> (#id)
   @value invalidateWeights () -> ()
-  @value getDividedSize () -> (Float)
+  @value getSize () -> (Float)
+  @value getFractionalSize () -> (Float)
 }
 
 define DualGraphNode {
@@ -166,11 +213,21 @@ define DualGraphNode {
     }
   }
 
-  getDividedSize () {
+  getSize () {
     scoped {
       optional WeightedGraphNode<#id> node2 <- `strong` node
     } in if (`present` node2) {
-      return require(node2).getDividedSize()
+      return require(node2).getSize()
+    } else {
+      return 0.0
+    }
+  }
+
+  getFractionalSize () {
+    scoped {
+      optional WeightedGraphNode<#id> node2 <- `strong` node
+    } in if (`present` node2) {
+      return require(node2).getFractionalSize()
     } else {
       return 0.0
     }
@@ -181,22 +238,32 @@ define WeightedGraphBuilder {
   @value [KVReader<#id,WeightedGraphNode<#id>>&KVWriter<#id,WeightedGraphNode<#id>>&ValueOrder<WeightedGraphNode<#id>>] nodes
 
   fromHashed (sources) {
-    return WeightedGraphBuilder<#id>{ HashedMap<#id,WeightedGraphNode<#id>>.new() }.processAll(sources).getNodes()
+    return WeightedGraphBuilder<#id>{ HashedMap<#id,WeightedGraphNode<#id>>.new() }.processAll<HashedSet<#id>>(sources).getNodes()
   }
 
   fromOrdered (sources) {
-    return WeightedGraphBuilder<#id>{ SortedMap<#id,WeightedGraphNode<#id>>.new() }.processAll(sources).getNodes()
+    return WeightedGraphBuilder<#id>{ SortedMap<#id,WeightedGraphNode<#id>>.new() }.processAll<SortedSet<#id>>(sources).getNodes()
   }
 
-  @value processAll (DefaultOrder<GraphNode<#id>>) -> (#self)
+  @value processAll<#set>
+    #set requires Append<#id>
+    #set requires Container
+    #set requires DefaultOrder<#id>
+    #set defines Default
+  (DefaultOrder<GraphNode<#id>>) -> (#self)
   processAll (sources) {
     traverse (sources.defaultOrder() -> GraphNode<#id> source) {
-      \ process(source)
+      \ process<#set>(source)
     }
     return self
   }
 
-  @value process (GraphNode<#id>) -> (WeightedGraphNode<#id>)
+  @value process<#set>
+    #set requires Append<#id>
+    #set requires Container
+    #set requires DefaultOrder<#id>
+    #set defines Default
+  (GraphNode<#id>) -> (WeightedGraphNode<#id>)
   process (source) (node) {
     scoped {
       optional WeightedGraphNode<#id> existing <- nodes.get(source.getId())
@@ -205,9 +272,9 @@ define WeightedGraphBuilder {
     } else {
       Vector<WeightedGraphNode<#id>> children <- Vector<WeightedGraphNode<#id>>.new()
       traverse (source.outgoing().defaultOrder() -> GraphNode<#id> child) {
-        \ children.append(process(child))
+        \ children.append(process<#set>(child))
       }
-      node <- WeightedGraphNode<#id>.new(source.getId(),children)
+      node <- WeightedGraphNode<#id>.new<#set>(source.getId(),children)
       \ node.getId() `nodes.set` node
       DualGraphNode<#id> dual <- DualGraphNode<#id>.new(node)
       traverse (children.defaultOrder() -> WeightedGraphNode<#id> child) {
