@@ -6,13 +6,13 @@ testcase "Command tests" {
 }
 
 unittest success {
-  Command command <-Command.buildFor("/bin/true").build()
+  Command command <- Command.buildFor("/bin/true").build()
   \ command.start().finish()
   \ UtilTesting.checkSuccess(command.get(),0)
 }
 
 unittest runOnce {
-  Command command <-Command.buildFor("/bin/sleep").addArg(0.1).build()
+  Command command <- Command.buildFor("/bin/sleep").addArg(0.1).build()
   // Make sure the count here is > the testcase timeout.
   \ UtilTesting.checkSuccess(command.runOnce(),0)
   \ UtilTesting.checkSuccess(command.runOnce(),0)
@@ -24,7 +24,7 @@ unittest runOnce {
 }
 
 unittest tryFinish {
-  Command command <-Command.buildFor("/bin/sleep").addArg(0.5).build()
+  Command command <- Command.buildFor("/bin/sleep").addArg(0.5).build()
   \ command.start()
   Bool pending <- false
   while (!command.tryFinish()) {
@@ -34,13 +34,13 @@ unittest tryFinish {
 }
 
 unittest idempotent {
-  Command command <-Command.buildFor("/bin/true").build()
+  Command command <- Command.buildFor("/bin/true").build()
   \ command.start().start().finish().finish()
   \ UtilTesting.checkSuccess(command.get(),0)
 }
 
 unittest failure {
-  Command command <-Command.buildFor("/bin/false").build()
+  Command command <- Command.buildFor("/bin/false").build()
   \ command.start().finish()
   \ UtilTesting.checkSuccessBetween(command.get(),1,255)
 }
@@ -52,7 +52,7 @@ testcase "Command bad program name" {
 }
 
 unittest test {
-  Command command <-Command.buildFor("/path/to/bad").build()
+  Command command <- Command.buildFor("/path/to/bad").build()
   \ command.start().finish()
   \ UtilTesting.checkSuccessBetween(command.get(),1,255)
 }
@@ -63,7 +63,7 @@ testcase "Command runDetached preserves previous result" {
 }
 
 unittest test {
-  Command command <-Command.buildFor("/bin/false").build()
+  Command command <- Command.buildFor("/bin/false").build()
   \ command.runOnce()
   \ UtilTesting.checkSuccessBetween(command.runDetached(),1,255)
 }
@@ -93,7 +93,7 @@ testcase "Command automatic cleanup of unfinished" {
 unittest test {
   String shellCommand <- "trap 'echo EXIT' EXIT; sleep 10; trap '' EXIT"
   scoped {
-    Command command <-Command.buildFor("/bin/bash").addArg("-c").addArg(shellCommand).build().start()
+    Command command <- Command.buildFor("/bin/bash").addArg("-c").addArg(shellCommand).build().start()
   } in \ Realtime.sleepSeconds(0.1)  // Give the command time to start.
   // Give the command time to process the signal.
   \ Realtime.sleepSeconds(0.1)
@@ -109,7 +109,7 @@ testcase "Command no cleanup of finished" {
 unittest test {
   String shellCommand <- "trap 'echo EXIT' EXIT; sleep 1; trap '' EXIT"
   scoped {
-    Command command <-Command.buildFor("/bin/bash").addArg("-c").addArg(shellCommand).build().start().finish()
+    Command command <- Command.buildFor("/bin/bash").addArg("-c").addArg(shellCommand).build().start().finish()
   } in \ Realtime.sleepSeconds(0.1)  // Give the command time to start.
   // Give the command time to process the signal.
   \ Realtime.sleepSeconds(0.1)
@@ -122,7 +122,7 @@ testcase "Command finish without start" {
 }
 
 unittest test {
-  Command command <-Command.buildFor("/bin/true").build()
+  Command command <- Command.buildFor("/bin/true").build()
   \ command.finish()
 }
 
@@ -133,7 +133,7 @@ testcase "Command get without start" {
 }
 
 unittest test {
-  Command command <-Command.buildFor("/bin/true").build()
+  Command command <- Command.buildFor("/bin/true").build()
   \ command.get()
 }
 
@@ -144,7 +144,7 @@ testcase "Command get without finish" {
 }
 
 unittest test {
-  Command command <-Command.buildFor("/bin/true").build()
+  Command command <- Command.buildFor("/bin/true").build()
   \ command.start()
   \ command.get()
 }
@@ -191,8 +191,8 @@ testcase "CommandPipe success" {
 }
 
 unittest test {
-  CommandBuilder ls   <-Command.buildFor("/bin/ls").addArg($ExprLookup[MODULE_PATH]$)
-  CommandBuilder grep <-Command.buildFor("/bin/egrep").addArg("-v").addArg("test")
+  CommandBuilder ls   <- Command.buildFor("/bin/ls").addArg($ExprLookup[MODULE_PATH]$)
+  CommandBuilder grep <- Command.buildFor("/bin/egrep").addArg("-v").addArg("test")
   [AsyncTask&AsyncValue<ErrorOr<Int>>] command <- CommandPipe.begin(ls).pipeStdout(grep).build()
   \ UtilTesting.checkSuccess(command.start().finish().get(),0)
 }
@@ -205,8 +205,8 @@ testcase "CommandPipe error" {
 }
 
 unittest test {
-  CommandBuilder ls   <-Command.buildFor("/bin/ls").addArg("/path/to/missing")
-  CommandBuilder grep <-Command.buildFor("/bin/egrep").addArg("-v").addArg("test")
+  CommandBuilder ls   <- Command.buildFor("/bin/ls").addArg("/path/to/missing")
+  CommandBuilder grep <- Command.buildFor("/bin/egrep").addArg("-v").addArg("test")
   [AsyncTask&AsyncValue<ErrorOr<Int>>] command <- CommandPipe.begin(ls).pipeStdout(grep).build()
   \ UtilTesting.checkSuccessBetween(command.start().finish().get(),1,255)
 }
