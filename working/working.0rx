@@ -143,15 +143,6 @@ define TestProgram {
 
     return allNodes
   }
-
-  @type constructLarge (Int) -> (DefaultOrder<GraphNode<Int>>)
-  constructLarge (size) (graphTree) {
-    Vector<TestGraphNode> allNodes <- Vector<TestGraphNode>.new()
-    traverse (Counter.zeroIndexed(size) -> Int id) {
-      \ allNodes.append(TestGraphNode.new(id,allNodes.duplicate()))
-    }
-    return allNodes
-  }
 }
 
 concrete TestGraphNode {
