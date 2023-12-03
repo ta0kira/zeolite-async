@@ -1,5 +1,5 @@
 testcase "Command tests" {
-  success
+  success TestChecker
   exclude stdout "."
   exclude stderr "."
   timeout 5
@@ -8,19 +8,19 @@ testcase "Command tests" {
 unittest success {
   Command command <- Command.buildFor("/bin/true").build()
   \ command.start().finish()
-  \ UtilTesting.checkSuccess(command.get(),0)
+  \ command.get() `Matches:with` CheckErrorOr:value(CheckValue:equals(0))
 }
 
 unittest runOnce {
   Command command <- Command.buildFor("/bin/sleep").addArg(0.1).build()
   // Make sure the count here is > the testcase timeout.
-  \ UtilTesting.checkSuccess(command.runOnce(),0)
-  \ UtilTesting.checkSuccess(command.runOnce(),0)
-  \ UtilTesting.checkSuccess(command.runOnce(),0)
-  \ UtilTesting.checkSuccess(command.runOnce(),0)
-  \ UtilTesting.checkSuccess(command.runOnce(),0)
-  \ UtilTesting.checkSuccess(command.runOnce(),0)
-  \ UtilTesting.checkSuccess(command.get(),0)
+  \ command.runOnce() `Matches:with` CheckErrorOr:value(CheckValue:equals(0))
+  \ command.runOnce() `Matches:with` CheckErrorOr:value(CheckValue:equals(0))
+  \ command.runOnce() `Matches:with` CheckErrorOr:value(CheckValue:equals(0))
+  \ command.runOnce() `Matches:with` CheckErrorOr:value(CheckValue:equals(0))
+  \ command.runOnce() `Matches:with` CheckErrorOr:value(CheckValue:equals(0))
+  \ command.runOnce() `Matches:with` CheckErrorOr:value(CheckValue:equals(0))
+  \ command.get() `Matches:with` CheckErrorOr:value(CheckValue:equals(0))
 }
 
 unittest tryFinish {
@@ -30,42 +30,42 @@ unittest tryFinish {
   while (!command.tryFinish()) {
     pending <- true
   }
-  \ UtilTesting.checkSuccess(command.get(),0)
+  \ command.get() `Matches:with` CheckErrorOr:value(CheckValue:equals(0))
 }
 
 unittest idempotent {
   Command command <- Command.buildFor("/bin/true").build()
   \ command.start().start().finish().finish()
-  \ UtilTesting.checkSuccess(command.get(),0)
+  \ command.get() `Matches:with` CheckErrorOr:value(CheckValue:equals(0))
 }
 
 unittest failure {
   Command command <- Command.buildFor("/bin/false").build()
   \ command.start().finish()
-  \ UtilTesting.checkSuccessBetween(command.get(),1,255)
+  \ command.get() `Matches:with` CheckErrorOr:value(CheckValue:betweenEquals(1,255))
 }
 
 
 testcase "Command bad program name" {
-  success
+  success TestChecker
   require stderr "/path/to/bad"
 }
 
 unittest test {
   Command command <- Command.buildFor("/path/to/bad").build()
   \ command.start().finish()
-  \ UtilTesting.checkSuccessBetween(command.get(),1,255)
+  \ command.get() `Matches:with` CheckErrorOr:value(CheckValue:betweenEquals(1,255))
 }
 
 
 testcase "Command runDetached preserves previous result" {
-  success
+  success TestChecker
 }
 
 unittest test {
   Command command <- Command.buildFor("/bin/false").build()
   \ command.runOnce()
-  \ UtilTesting.checkSuccessBetween(command.runDetached(),1,255)
+  \ command.runDetached() `Matches:with` CheckErrorOr:value(CheckValue:betweenEquals(1,255))
 }
 
 
@@ -117,7 +117,7 @@ unittest test {
 
 
 testcase "Command finish without start" {
-  crash
+  failure
   require "started"
 }
 
@@ -128,7 +128,7 @@ unittest test {
 
 
 testcase "Command get without start" {
-  crash
+  failure
   require "started"
 }
 
@@ -139,7 +139,7 @@ unittest test {
 
 
 testcase "Command get without finish" {
-  crash
+  failure
   require "completed"
 }
 
@@ -183,7 +183,7 @@ unittest test {
 
 
 testcase "CommandPipe success" {
-  success
+  success TestChecker
   require stdout "command\.0rp"
   require stdout "src"
   exclude stdout "test"
@@ -194,12 +194,12 @@ unittest test {
   CommandBuilder ls   <- Command.buildFor("/bin/ls").addArg($ExprLookup[MODULE_PATH]$)
   CommandBuilder grep <- Command.buildFor("/bin/egrep").addArg("-v").addArg("test")
   [AsyncTask&AsyncValue<ErrorOr<Int>>] command <- CommandPipe.begin(ls).pipeStdout(grep).build()
-  \ UtilTesting.checkSuccess(command.start().finish().get(),0)
+  \ command.start().finish().get() `Matches:with` CheckErrorOr:value(CheckValue:equals(0))
 }
 
 
 testcase "CommandPipe error" {
-  success
+  success TestChecker
   require stderr "/path/to/missing"
   timeout 5
 }
@@ -208,5 +208,5 @@ unittest test {
   CommandBuilder ls   <- Command.buildFor("/bin/ls").addArg("/path/to/missing")
   CommandBuilder grep <- Command.buildFor("/bin/egrep").addArg("-v").addArg("test")
   [AsyncTask&AsyncValue<ErrorOr<Int>>] command <- CommandPipe.begin(ls).pipeStdout(grep).build()
-  \ UtilTesting.checkSuccessBetween(command.start().finish().get(),1,255)
+  \ command.start().finish().get() `Matches:with` CheckErrorOr:value(CheckValue:betweenEquals(1,255))
 }

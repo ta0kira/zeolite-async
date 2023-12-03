@@ -1,5 +1,5 @@
 testcase "AsyncSumInt tests" {
-  success
+  success TestChecker
 }
 
 unittest test {
@@ -10,7 +10,8 @@ unittest test {
         .append(AsyncConst:from('A'))
         .append(Factorial.new(3))
 
+  Int actual <- node `Compute:with` InlineRunner<AsyncId>.unlimited()
   Int expected <- 1000 + 5*4*3*2 + 'A'.asInt() + 3*2
 
-  \ Testing.checkEquals(node `Compute:with` InlineRunner<AsyncId>.unlimited(),expected)
+  \ actual `Matches:with` CheckValue:equals(expected)
 }
