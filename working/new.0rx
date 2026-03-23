@@ -103,7 +103,7 @@ define NodePermuter {
     } in if (`present` nodeStates.get(id)) {
       nodeState <- require(maybeExisting)
     } else {
-      HashedSet<Int> reachable <- HashedSet<Int>.default()
+      Vector<Int> reachable <- Vector<Int>.default()
       \ id `nodeStates.set` (nodeState <- NodeState.new(reachable))
       traverse (node&.outgoing()&.defaultOrder() -> Int blockedId) {
         $Hidden[id, node]$
@@ -162,7 +162,7 @@ define NewTest {
   generateTree (size, flipped) {
     HashedMap<Int, [Append<Int> & DefaultOrder<Int>]> edges <- HashedMap<Int, [Append<Int> & DefaultOrder<Int>]>.default()
     traverse (Counter.zeroIndexed(size) -> Int id) {
-      \ id `edges.set` HashedSet<Int>.default()
+      \ id `edges.set` Vector<Int>.default()
     }
     traverse (Counter.zeroIndexed(size) -> Int id) {
       Int leftValue <- (id << 1)+1
