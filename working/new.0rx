@@ -27,7 +27,7 @@ define NodeState {
   new (reachable) { return #self{ reachable, CategoricalTree<Int>.default() } }
 
   duplicate () {
-    return #self{ reachable.defaultOrder() `OrderH:duplicateTo` HashedSet<Int>.default(), blockedBy.duplicate() }
+    return #self{ reachable, blockedBy.duplicate() }
   }
 
   reachable () { return reachable }
@@ -48,7 +48,7 @@ concrete NodePermuter {
   refines Duplicate
 
   @type fromNodes ([KVReader<Int, Node> & DefaultOrder<KeyValue<Int, Node>>]) -> (#self)
-  @value consumeAndPermute (Generator<Float> probability:, Append<Int> output:) -> (Int)
+  @value consumeAndPermute (Generator<Float> probability:, Append<Int> output:) -> (Float)
 }
 
 define NodePermuter {
@@ -73,8 +73,8 @@ define NodePermuter {
     return #self{ remainingNodes.duplicate(), newStates }
   }
 
-  consumeAndPermute (probability, output) (jumps) {
-    jumps <- 0
+  consumeAndPermute (probability, output) (jumpCost) {
+    jumpCost <- 0.0
     while (remainingNodes.getTotal() > 0) {
       scoped {
         CategoricalReader<Int> subgraph <- remainingNodes
@@ -90,7 +90,7 @@ define NodePermuter {
             \ nodeStates.get(blockedId)&.removeBlockedBy(nextId)
           }
         } else {
-          jumps <- jumps+1
+          jumpCost <- jumpCost+Math.log2(subgraph.getTotal().asFloat())
         }
       }
     }
@@ -145,12 +145,16 @@ define NewTest {
     NodePermuter permuter <- generateTree(size: size, flipped: flipped)
     traverse (Counter.zeroIndexed(count) -> _) {
       Vector<Int> output <- Vector<Int>.default()
-      Int jumps <- permuter.duplicate().consumeAndPermute(probability: probability, output: output)
+      Float jumpCost <- permuter.duplicate().consumeAndPermute(probability: probability, output: output)
       \ BasicOutput.stdout().write("[")
       traverse (output.defaultOrder() -> Int id) {
         \ BasicOutput.stdout().write(" ").write(id)
       }
-      \ BasicOutput.stdout().write(" ] jumps: ").write(jumps).write("\n")
+      \ BasicOutput.stdout()
+        .write(" ]\n")
+      \ BasicOutput.stderr()
+        .write("jumpCost: ").write(jumpCost)
+        .write("\n")
     }
   }
 
