@@ -76,20 +76,25 @@ define NodePermuter {
   consumeAndPermute (probability, output) (jumpCost) {
     jumpCost <- 0.0
     while (remainingNodes.getTotal() > 0) {
+      \ BasicOutput.stderr().write("Determine ").write(remainingNodes.getTotal()).write("...\n")
       scoped {
         CategoricalReader<Int> subgraph <- remainingNodes
+        Int jumpNumber <- 0
       } in while (subgraph.getTotal() > 0) {
+        \ BasicOutput.stderr().write("Jump ").write(jumpNumber).write("...\n")
         Int nextId <- subgraph.locate((subgraph.getTotal().asFloat()*probability.generate()).asInt())
         optional NodeState nextNode <- nodeStates.get(nextId)
         if (! `present` nextNode) {
           fail("bad graph")
         } elif ((subgraph <- require(nextNode).blockedBy()).getTotal() == 0) {
+          \ BasicOutput.stderr().write("Select ").write(nextId).write("...\n")
           \ output.append(nextId)
           \ nextId `remainingNodes.setWeight` 0
           traverse (nextNode&.reachable()&.defaultOrder() -> Int blockedId) {
             \ nodeStates.get(blockedId)&.removeBlockedBy(nextId)
           }
         } else {
+          jumpNumber <- jumpNumber+1
           jumpCost <- jumpCost+Math.log2(subgraph.getTotal().asFloat())
         }
       }
@@ -103,6 +108,7 @@ define NodePermuter {
     } in if (`present` nodeStates.get(id)) {
       nodeState <- require(maybeExisting)
     } else {
+      \ BasicOutput.stderr().write("Reachability ").write(id).write("...\n")
       Vector<Int> reachable <- Vector<Int>.default()
       \ id `nodeStates.set` (nodeState <- NodeState.new(reachable))
       traverse (node&.outgoing()&.defaultOrder() -> Int blockedId) {
@@ -144,8 +150,13 @@ define NewTest {
     Generator<Float> probability <- RandomUniform.probability().setSeed((Realtime.monoSeconds()*1000.0).asInt())
     NodePermuter permuter <- generateTree(size: size, flipped: flipped)
     traverse (Counter.zeroIndexed(count) -> _) {
+      NodePermuter newPermuter <- permuter
+      $Hidden[permuter]$
+      if (count > 1) {
+        newPermuter <- newPermuter.duplicate()
+      }
       Vector<Int> output <- Vector<Int>.default()
-      Float jumpCost <- permuter.duplicate().consumeAndPermute(probability: probability, output: output)
+      Float jumpCost <- newPermuter.consumeAndPermute(probability: probability, output: output)
       \ BasicOutput.stdout().write("[")
       traverse (output.defaultOrder() -> Int id) {
         \ BasicOutput.stdout().write(" ").write(id)
@@ -162,9 +173,11 @@ define NewTest {
   generateTree (size, flipped) {
     HashedMap<Int, [Append<Int> & DefaultOrder<Int>]> edges <- HashedMap<Int, [Append<Int> & DefaultOrder<Int>]>.default()
     traverse (Counter.zeroIndexed(size) -> Int id) {
+      \ BasicOutput.stderr().write("Initialize ").write(id).write("...\n")
       \ id `edges.set` Vector<Int>.default()
     }
     traverse (Counter.zeroIndexed(size) -> Int id) {
+      \ BasicOutput.stderr().write("Connect ").write(id).write("...\n")
       Int leftValue <- (id << 1)+1
       Int rightValue <- (id << 1)+2
       if (leftValue < size) {
@@ -184,6 +197,7 @@ define NewTest {
     }
     HashedMap<Int, Node> allNodes <- HashedMap<Int, Node>.new()
     traverse (edges.defaultOrder() -> KeyValue<Int, DefaultOrder<Int>> edgesWithId) {
+      \ BasicOutput.stderr().write("Nodify ").write(edgesWithId.getKey()).write("...\n")
       \ edgesWithId.getKey() `allNodes.set` Node.new(outgoing: edgesWithId.getValue())
     }
     return NodePermuter.fromNodes(allNodes)
