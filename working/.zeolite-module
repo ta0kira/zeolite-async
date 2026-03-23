@@ -9,6 +9,6 @@ private_deps: [
   "lib/thread"
 ]
 mode: binary {
-  category: TestProgram
+  category: NewTest
   function: run
 }

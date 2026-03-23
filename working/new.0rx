@@ -1,0 +1,187 @@
+concrete Node {
+  @type new (DefaultOrder<Int> outgoing:) -> (#self)
+  @value outgoing () -> (DefaultOrder<Int>)
+}
+
+define Node {
+  @value DefaultOrder<Int> outgoing
+
+  new (outgoing) { return delegate -> #self }
+  outgoing () { return outgoing }
+}
+
+concrete NodeState {
+  refines Duplicate
+
+  @type new (DefaultOrder<Int>) -> (#self)
+  @value reachable () -> (DefaultOrder<Int>)
+  @value blockedBy () -> (CategoricalReader<Int>)
+  @value addBlockedBy (Int) -> (#self)
+  @value removeBlockedBy (Int) -> (#self)
+}
+
+define NodeState {
+  @value DefaultOrder<Int> reachable
+  @value CategoricalTree<Int> blockedBy
+
+  new (reachable) { return #self{ reachable, CategoricalTree<Int>.default() } }
+
+  duplicate () {
+    return #self{ reachable.defaultOrder() `OrderH:duplicateTo` HashedSet<Int>.default(), blockedBy.duplicate() }
+  }
+
+  reachable () { return reachable }
+  blockedBy () { return blockedBy }
+
+  addBlockedBy (id) {
+    \ id `blockedBy.setWeight` 1
+    return self
+  }
+
+  removeBlockedBy (id) {
+    \ id `blockedBy.setWeight` 0
+    return self
+  }
+}
+
+concrete NodePermuter {
+  refines Duplicate
+
+  @type fromNodes ([KVReader<Int, Node> & DefaultOrder<KeyValue<Int, Node>>]) -> (#self)
+  @value consumeAndPermute (Generator<Float> probability:, Append<Int> output:) -> (Int)
+}
+
+define NodePermuter {
+  @value CategoricalTree<Int> remainingNodes
+  @value [KVReader<Int, NodeState> & DefaultOrder<KeyValue<Int, NodeState>>] nodeStates
+
+  fromNodes (allNodes) {
+    CategoricalTree<Int> remainingNodes <- CategoricalTree<Int>.default()
+    HashedMap<Int, NodeState> nodeStates <- HashedMap<Int, NodeState>.default()
+    traverse (allNodes.defaultOrder() -> KeyValue<Int, Node> nodeWithId) {
+      \ nodeWithId.getKey() `remainingNodes.setWeight` 1
+      \ setAllReachable(nodeWithId.getKey(), nodeWithId.getValue(), allNodes, nodeStates)
+    }
+    return #self{ remainingNodes, nodeStates }
+  }
+
+  duplicate () {
+    HashedMap<Int, NodeState> newStates <- HashedMap<Int, NodeState>.default()
+    traverse (nodeStates.defaultOrder() -> KeyValue<Int, NodeState> nodeWithId) {
+      \ nodeWithId.getKey() `newStates.set` nodeWithId.getValue().duplicate()
+    }
+    return #self{ remainingNodes.duplicate(), newStates }
+  }
+
+  consumeAndPermute (probability, output) (jumps) {
+    jumps <- 0
+    while (remainingNodes.getTotal() > 0) {
+      scoped {
+        CategoricalReader<Int> subgraph <- remainingNodes
+      } in while (subgraph.getTotal() > 0) {
+        Int nextId <- subgraph.locate((subgraph.getTotal().asFloat()*probability.generate()).asInt())
+        optional NodeState nextNode <- nodeStates.get(nextId)
+        if (! `present` nextNode) {
+          fail("bad graph")
+        } elif ((subgraph <- require(nextNode).blockedBy()).getTotal() == 0) {
+          \ output.append(nextId)
+          \ nextId `remainingNodes.setWeight` 0
+          traverse (nextNode&.reachable()&.defaultOrder() -> Int blockedId) {
+            \ nodeStates.get(blockedId)&.removeBlockedBy(nextId)
+          }
+        } else {
+          jumps <- jumps+1
+        }
+      }
+    }
+  }
+
+  @type setAllReachable (Int, optional Node, KVReader<Int, Node>, [KVReader<Int, NodeState> & KVWriter<Int, NodeState>]) -> (NodeState)
+  setAllReachable (id, node, allNodes, nodeStates) (nodeState) {
+    scoped {
+      optional NodeState maybeExisting <- nodeStates.get(id)
+    } in if (`present` nodeStates.get(id)) {
+      nodeState <- require(maybeExisting)
+    } else {
+      HashedSet<Int> reachable <- HashedSet<Int>.default()
+      \ id `nodeStates.set` (nodeState <- NodeState.new(reachable))
+      traverse (node&.outgoing()&.defaultOrder() -> Int blockedId) {
+        $Hidden[id, node]$
+        optional Node blockedNode <- allNodes.get(blockedId)
+        NodeState childState <- setAllReachable(blockedId, blockedNode, allNodes, nodeStates)
+        \ reachable.append(blockedId) `AppendH:from` childState.reachable().defaultOrder()
+      }
+      traverse (reachable.defaultOrder() -> Int blockedId) {
+        \ nodeStates.get(blockedId)&.addBlockedBy(id)
+      }
+    }
+  }
+}
+
+concrete NewTest {
+  @type run () -> ()
+}
+
+define NewTest {
+  run () {
+    Formatted errorHelp <- "NewTest [normal|flipped] [size] [count]"
+
+    if (Argv.global().size() != 4) {
+      fail(errorHelp)
+    }
+
+    Bool flipped <- defer
+    if (Argv.global().readAt(1) == "normal") {
+      flipped <- false
+    } elif (Argv.global().readAt(1) == "flipped") {
+      flipped <- true
+    } else {
+      fail(errorHelp)
+    }
+    Int size <- ParseChars.int(Argv.global().readAt(2)).getValue()
+    Int count <- ParseChars.int(Argv.global().readAt(3)).getValue()
+
+    Generator<Float> probability <- RandomUniform.probability().setSeed((Realtime.monoSeconds()*1000.0).asInt())
+    NodePermuter permuter <- generateTree(size: size, flipped: flipped)
+    traverse (Counter.zeroIndexed(count) -> _) {
+      Vector<Int> output <- Vector<Int>.default()
+      Int jumps <- permuter.duplicate().consumeAndPermute(probability: probability, output: output)
+      \ BasicOutput.stdout().write("[")
+      traverse (output.defaultOrder() -> Int id) {
+        \ BasicOutput.stdout().write(" ").write(id)
+      }
+      \ BasicOutput.stdout().write(" ] jumps: ").write(jumps).write("\n")
+    }
+  }
+
+  @type generateTree (Int size:, Bool flipped:) -> (NodePermuter)
+  generateTree (size, flipped) {
+    HashedMap<Int, [Append<Int> & DefaultOrder<Int>]> edges <- HashedMap<Int, [Append<Int> & DefaultOrder<Int>]>.default()
+    traverse (Counter.zeroIndexed(size) -> Int id) {
+      \ id `edges.set` HashedSet<Int>.default()
+    }
+    traverse (Counter.zeroIndexed(size) -> Int id) {
+      Int leftValue <- (id << 1)+1
+      Int rightValue <- (id << 1)+2
+      if (leftValue < size) {
+        if (flipped) {
+          \ edges.get(leftValue)&.append(id)
+        } else {
+          \ edges.get(id)&.append(leftValue)
+        }
+      }
+      if (rightValue < size) {
+        if (flipped) {
+          \ edges.get(rightValue)&.append(id)
+        } else {
+          \ edges.get(id)&.append(rightValue)
+        }
+      }
+    }
+    HashedMap<Int, Node> allNodes <- HashedMap<Int, Node>.new()
+    traverse (edges.defaultOrder() -> KeyValue<Int, DefaultOrder<Int>> edgesWithId) {
+      \ edgesWithId.getKey() `allNodes.set` Node.new(outgoing: edgesWithId.getValue())
+    }
+    return NodePermuter.fromNodes(allNodes)
+  }
+}
