@@ -4,7 +4,7 @@ Requires [`zeolite`](https://github.com/ta0kira/zeolite), probably `HEAD`.
 # Build all of the modules.
 zeolite -R working
 
-# NewTest [normal|flipped] [size] [count]
-working/NewTest normal 6 10
-working/NewTest flipped 5 10
+# NewTest [jump|recursive] [normal|flipped] [size] [count]
+working/NewTest jump normal 6 10
+working/NewTest recursive flipped 5 10
 ```

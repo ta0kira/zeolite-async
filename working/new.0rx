@@ -130,25 +130,75 @@ concrete NewTest {
 
 define NewTest {
   run () {
-    Formatted errorHelp <- "NewTest [normal|flipped] [size] [count]"
+    Formatted errorHelp <- "NewTest [jump|recursive] [normal|flipped] [size] [count]"
 
-    if (Argv.global().size() != 4) {
+    if (Argv.global().size() != 5) {
       fail(errorHelp)
     }
 
+    Bool recursive <- defer
+    if (Argv.global().readAt(1) == "jump") {
+      recursive <- false
+    } elif (Argv.global().readAt(1) == "recursive") {
+      recursive <- true
+    } else {
+      fail(errorHelp)
+    }
     Bool flipped <- defer
-    if (Argv.global().readAt(1) == "normal") {
+    if (Argv.global().readAt(2) == "normal") {
       flipped <- false
-    } elif (Argv.global().readAt(1) == "flipped") {
+    } elif (Argv.global().readAt(2) == "flipped") {
       flipped <- true
     } else {
       fail(errorHelp)
     }
-    Int size <- ParseChars.int(Argv.global().readAt(2)).getValue()
-    Int count <- ParseChars.int(Argv.global().readAt(3)).getValue()
+    Int size <- ParseChars.int(Argv.global().readAt(3)).getValue()
+    Int count <- ParseChars.int(Argv.global().readAt(4)).getValue()
 
     Generator<Float> probability <- RandomUniform.probability().setSeed((Realtime.monoSeconds()*1000.0).asInt())
-    NodePermuter permuter <- generateTree(size: size, flipped: flipped)
+    if (recursive) {
+      \ runWithRecursion(size, count, flipped, probability)
+    } else {
+      \ runWithJumps(size, count, flipped, probability)
+    }
+  }
+
+  @type runWithRecursion (Int, Int, Bool, Generator<Float>) -> ()
+  runWithRecursion (size, count, flipped, probability) {
+    optional Subgraph<Int> subgraph <- generateRecursiveTree(size: size, flipped: flipped, index: 0)
+    traverse (Counter.zeroIndexed(count) -> _) {
+      \ BasicOutput.stdout().write("[")
+      traverse (subgraph&.serialize(probability: probability){0} -> Int id) {
+        \ BasicOutput.stdout().write(" ").write(id)
+      }
+      \ BasicOutput.stdout().write(" ]\n")
+    }
+  }
+
+  @type generateRecursiveTree (Int size:, Bool flipped:, Int index:) -> (optional Subgraph<Int>)
+  generateRecursiveTree (size, flipped, index) (subgraph) {
+    subgraph <- empty
+    if (index < size) {
+      Vector<Subgraph<Int>> others <- Vector<Subgraph<Int>>.default()
+      traverse (Counter.zeroIndexed(2) -> Int offset) {
+        optional Subgraph<Int> nested <- generateRecursiveTree(size: size, flipped: flipped, index: (index << 1)+offset+1)
+        if (`present` nested) {
+          \ others.append(`require` nested)
+        }
+      }
+      if (others.size() == 0) {
+        subgraph <- LeafSubgraph<Int>.new(index)
+      } elif (flipped) {
+        subgraph <- EertSubgraph<Int>.new(index, IndependentSubgraphs<Int>.new(others))
+      } else {
+        subgraph <- TreeSubgraph<Int>.new(index, IndependentSubgraphs<Int>.new(others))
+      }
+    }
+  }
+
+  @type runWithJumps (Int, Int, Bool, Generator<Float>) -> ()
+  runWithJumps (size, count, flipped, probability) {
+    NodePermuter permuter <- generateGraphTree(size: size, flipped: flipped)
     traverse (Counter.zeroIndexed(count) -> _) {
       NodePermuter newPermuter <- permuter
       $Hidden[permuter]$
@@ -169,8 +219,8 @@ define NewTest {
     }
   }
 
-  @type generateTree (Int size:, Bool flipped:) -> (NodePermuter)
-  generateTree (size, flipped) {
+  @type generateGraphTree (Int size:, Bool flipped:) -> (NodePermuter)
+  generateGraphTree (size, flipped) {
     HashedMap<Int, [Append<Int> & DefaultOrder<Int>]> edges <- HashedMap<Int, [Append<Int> & DefaultOrder<Int>]>.default()
     traverse (Counter.zeroIndexed(size) -> Int id) {
       \ BasicOutput.stderr().write("Initialize ").write(id).write("...\n")
@@ -201,5 +251,127 @@ define NewTest {
       \ edgesWithId.getKey() `allNodes.set` Node.new(outgoing: edgesWithId.getValue())
     }
     return NodePermuter.fromNodes(allNodes)
+  }
+}
+
+@value interface Subgraph<#x> {
+  serialize (optional Generator<Float> probability:) -> (optional ForwardNode<#x>, optional ForwardNode<#x>, Int)
+}
+
+concrete IndependentSubgraphs<#x> {
+  refines Subgraph<#x>
+
+  @type new (DefaultOrder<Subgraph<#x>>) -> (#self)
+}
+
+define IndependentSubgraphs {
+  @value DefaultOrder<Subgraph<#x>> subgraphs
+
+  new (subgraphs) { return delegate -> #self }
+
+  serialize (probability) (head, tail, size) {
+    head <- empty
+    tail <- empty
+    size <- 0
+    CategoricalTree<Int> allRemaining <- CategoricalTree<Int>.default()
+    HashedMap<Int, ForwardNode<#x>> allSerialized <- HashedMap<Int, ForwardNode<#x>>.new()
+    scoped {
+      Int index <- 0
+    } in traverse (subgraphs.defaultOrder() -> Subgraph<#x> subgraph) {
+      $ReadOnly[index]$
+      $Hidden[head, tail, size]$
+      optional ForwardNode<#x> subHead, _, Int subSize <- subgraph.serialize(probability: probability)
+      if (`present` subHead) {
+        \ index `allRemaining.setWeight` subSize
+        \ index `allSerialized.set` `require` subHead
+      }
+    } update {
+      index <- index+1
+    }
+    while (allRemaining.getTotal() > 0) {
+      Float weight <- probability&.generate() <|| 0.0
+      Int nextIndex <- allRemaining.locate((allRemaining.getTotal().asFloat()*weight).asInt())
+      \ allRemaining.decrWeight(nextIndex)
+      scoped {
+        optional ForwardNode<#x> nextNode <- allSerialized.get(nextIndex)
+      } in if (`present` nextNode) {
+        size <- size+1
+        \ nextIndex `allSerialized.swap` require(nextNode).setNext(empty)
+        if (`present` tail) {
+          \ require(tail).setNext(nextNode)
+        }
+        tail <- nextNode
+        if (! `present` head) {
+          head <- nextNode
+        }
+      }
+    }
+  }
+}
+
+concrete TreeSubgraph<#x> {
+  refines Subgraph<#x>
+
+  @type new (#x, Subgraph<#x>) -> (#self)
+}
+
+define TreeSubgraph {
+  @value #x value
+  @value Subgraph<#x> children
+
+  new (value, children) { return delegate -> #self }
+
+  serialize (probability) (head, tail, size) {
+    head, tail, size <- delegate -> `children.serialize`
+    ForwardNode<#x> newNode <- ForwardNode<#x>.newNode(value)
+    \ newNode.setNext(head)
+    head <- newNode
+    if (! `present` tail) {
+      tail <- newNode
+    }
+    size <- size+1
+  }
+}
+
+concrete EertSubgraph<#x> {
+  refines Subgraph<#x>
+
+  @type new (#x, Subgraph<#x>) -> (#self)
+}
+
+define EertSubgraph {
+  @value #x value
+  @value Subgraph<#x> parents
+
+  new (value, parents) { return delegate -> #self }
+
+  serialize (probability) (head, tail, size) {
+    head, tail, size <- delegate -> `parents.serialize`
+    ForwardNode<#x> newNode <- ForwardNode<#x>.newNode(value)
+    if (`present` tail) {
+      \ require(tail).setNext(newNode)
+    }
+    tail <- newNode
+    if (! `present` head) {
+      head <- newNode
+    }
+    size <- size+1
+  }
+}
+
+concrete LeafSubgraph<#x> {
+  refines Subgraph<#x>
+
+  @type new (#x) -> (#self)
+}
+
+define LeafSubgraph {
+  @value #x value
+
+  new (value) { return delegate -> #self }
+
+  serialize (_) {
+    ForwardNode<#x> newNode <- ForwardNode<#x>.newNode(value)
+    return newNode, newNode, 1
   }
 }
