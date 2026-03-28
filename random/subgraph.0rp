@@ -1,0 +1,37 @@
+@value interface Subgraph<#x> {
+  serialize (optional Generator<Float> probability:) -> (optional ForwardNode<#x>, optional ForwardNode<#x>, Int)
+}
+
+concrete IndependentSubgraphs<#x> {
+  refines Subgraph<#x>
+
+  @type new (DefaultOrder<Subgraph<#x>>) -> (#self)
+}
+
+concrete TreeSubgraph<#x> {
+  refines Subgraph<#x>
+
+  @type new (#x, Subgraph<#x>) -> (#self)
+}
+
+concrete EertSubgraph<#x> {
+  refines Subgraph<#x>
+
+  @type new (Subgraph<#x>, #x) -> (#self)
+}
+
+concrete LeafSubgraph<#x> {
+  refines Subgraph<#x>
+
+  @type new (#x) -> (#self)
+}
+
+concrete GeneralSubgraph<#x> {
+  refines Subgraph<#x>
+  #x immutable
+  #x defines Equals<#x>
+  #x defines LessThan<#x>
+  #x requires Hashed
+
+  @type new ([KVReader<#x, DefaultOrder<#x>> & KeyOrder<#x>] edges:) -> (#self)
+}

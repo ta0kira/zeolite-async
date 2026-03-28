@@ -1,0 +1,208 @@
+define IndependentSubgraphs {
+  @value DefaultOrder<Subgraph<#x>> subgraphs
+
+  new (subgraphs) { return delegate -> #self }
+
+  serialize (probability) (head, tail, size) {
+    head <- empty
+    tail <- empty
+    size <- 0
+    CategoricalTree<Int> allRemaining <- CategoricalTree<Int>.default()
+    HashedMap<Int, ForwardNode<#x>> allSerialized <- HashedMap<Int, ForwardNode<#x>>.new()
+    scoped {
+      Int index <- 0
+    } in traverse (subgraphs.defaultOrder() -> Subgraph<#x> subgraph) {
+      $ReadOnly[index]$
+      $Hidden[head, tail, size]$
+      optional ForwardNode<#x> subHead, _, Int subSize <- subgraph.serialize(probability: probability)
+      if (`present` subHead) {
+        \ index `allRemaining.setWeight` subSize
+        \ index `allSerialized.set` `require` subHead
+      }
+    } update {
+      index <- index+1
+    }
+    while (allRemaining.getTotal() > 0) {
+      Float weight <- probability&.generate() <|| 0.0
+      Int nextIndex <- allRemaining.locate((allRemaining.getTotal().asFloat()*weight).asInt())
+      \ allRemaining.decrWeight(nextIndex)
+      scoped {
+        optional ForwardNode<#x> nextNode <- allSerialized.get(nextIndex)
+      } in if (`present` nextNode) {
+        size <- size+1
+        \ nextIndex `allSerialized.swap` require(nextNode).setNext(empty)
+        if (`present` tail) {
+          \ require(tail).setNext(nextNode)
+        }
+        tail <- nextNode
+        if (! `present` head) {
+          head <- nextNode
+        }
+      }
+    }
+  }
+}
+
+define TreeSubgraph {
+  @value #x value
+  @value Subgraph<#x> children
+
+  new (value, children) { return delegate -> #self }
+
+  serialize (probability) (head, tail, size) {
+    head, tail, size <- delegate -> `children.serialize`
+    ForwardNode<#x> newNode <- ForwardNode<#x>.newNode(value)
+    \ newNode.setNext(head)
+    head <- newNode
+    if (! `present` tail) {
+      tail <- newNode
+    }
+    size <- size+1
+  }
+}
+
+define EertSubgraph {
+  @value Subgraph<#x> parents
+  @value #x value
+
+  new (parents, value) { return delegate -> #self }
+
+  serialize (probability) (head, tail, size) {
+    head, tail, size <- delegate -> `parents.serialize`
+    ForwardNode<#x> newNode <- ForwardNode<#x>.newNode(value)
+    if (`present` tail) {
+      \ require(tail).setNext(newNode)
+    }
+    tail <- newNode
+    if (! `present` head) {
+      head <- newNode
+    }
+    size <- size+1
+  }
+}
+
+define LeafSubgraph {
+  @value #x value
+
+  new (value) { return delegate -> #self }
+
+  serialize (_) {
+    ForwardNode<#x> newNode <- ForwardNode<#x>.newNode(value)
+    return newNode, newNode, 1
+  }
+}
+
+define GeneralSubgraph {
+  @value [KVReader<#x, DefaultOrder<#x>> & KeyOrder<#x>] edges
+
+  new (edges) { return delegate -> #self }
+
+  serialize (probability) (head, tail, size) {
+    ListBuilder<#x, ForwardNode<#x>> builder <- ForwardNode<#x>.builder()
+    NodePermuter<#x> permuter <- NodePermuter<#x>.fromEdges(edges)
+    size <- permuter.consumeAndPermute(probability: probability, output: builder)
+    head, tail <- builder.build()
+  }
+}
+
+concrete NodeState<#x> {
+  #x immutable
+  #x defines Equals<#x>
+  #x defines LessThan<#x>
+  #x requires Hashed
+
+  @type new (DefaultOrder<#x>) -> (#self)
+  @value reachable () -> (DefaultOrder<#x>)
+  @value blockedBy () -> (CategoricalReader<#x>)
+  @value addBlockedBy (#x) -> (#self)
+  @value removeBlockedBy (#x) -> (#self)
+}
+
+define NodeState {
+  @value DefaultOrder<#x> reachable
+  @value CategoricalTree<#x> blockedBy
+
+  new (reachable) { return #self{ reachable, CategoricalTree<#x>.default() } }
+  reachable () { return reachable }
+  blockedBy () { return blockedBy }
+
+  addBlockedBy (id) {
+    \ id `blockedBy.setWeight` 1
+    return self
+  }
+
+  removeBlockedBy (id) {
+    \ id `blockedBy.setWeight` 0
+    return self
+  }
+}
+
+concrete NodePermuter<#x> {
+  #x immutable
+  #x defines Equals<#x>
+  #x defines LessThan<#x>
+  #x requires Hashed
+
+  @type fromEdges ([KVReader<#x, DefaultOrder<#x>> & KeyOrder<#x>]) -> (#self)
+  @value consumeAndPermute (optional Generator<Float> probability:, Append<#x> output:) -> (Int)
+}
+
+define NodePermuter {
+  @value CategoricalTree<#x> remainingNodes
+  @value [KVReader<#x, NodeState<#x>> & DefaultOrder<KeyValue<#x, NodeState<#x>>>] nodeStates
+
+  fromEdges (edges) {
+    CategoricalTree<#x> remainingNodes <- CategoricalTree<#x>.default()
+    HashedMap<#x, NodeState<#x>> nodeStates <- HashedMap<#x, NodeState<#x>>.default()
+    traverse (edges.keyOrder() -> #x id) {
+      \ id `remainingNodes.setWeight` 1
+      \ setAllReachable(id, edges.get(id), edges, nodeStates)
+    }
+    return #self{ remainingNodes, nodeStates }
+  }
+
+  consumeAndPermute (probability, output) (count) {
+    count <- 0
+    while (remainingNodes.getTotal() > 0) {
+      scoped {
+        CategoricalReader<#x> subgraph <- remainingNodes
+        Int jumpNumber <- 0
+      } in while (subgraph.getTotal() > 0) {
+        Float weight <- probability&.generate() <|| 0.0
+        #x nextId <- subgraph.locate((subgraph.getTotal().asFloat()*weight).asInt())
+        optional NodeState<#x> nextNode <- nodeStates.get(nextId)
+        if (! `present` nextNode) {
+          fail("bad graph")
+        } elif ((subgraph <- require(nextNode).blockedBy()).getTotal() == 0) {
+          count <- count+1
+          \ output.append(nextId)
+          \ nextId `remainingNodes.setWeight` 0
+          traverse (nextNode&.reachable()&.defaultOrder() -> #x blockedId) {
+            \ nodeStates.get(blockedId)&.removeBlockedBy(nextId)
+          }
+        }
+      }
+    }
+  }
+
+  @type setAllReachable (#x, optional DefaultOrder<#x>, KVReader<#x, DefaultOrder<#x>>, [KVReader<#x, NodeState<#x>> & KVWriter<#x, NodeState<#x>>]) -> (NodeState<#x>)
+  setAllReachable (id, node, edges, nodeStates) (nodeState) {
+    scoped {
+      optional NodeState<#x> maybeExisting <- nodeStates.get(id)
+    } in if (`present` nodeStates.get(id)) {
+      nodeState <- require(maybeExisting)
+    } else {
+      Vector<#x> reachable <- Vector<#x>.default()
+      \ id `nodeStates.set` (nodeState <- NodeState<#x>.new(reachable))
+      traverse (node&.defaultOrder() -> #x blockedId) {
+        $Hidden[id, node]$
+        optional DefaultOrder<#x> blockedNode <- edges.get(blockedId)
+        NodeState<#x> childState <- setAllReachable(blockedId, blockedNode, edges, nodeStates)
+        \ reachable.append(blockedId) `AppendH:from` childState.reachable().defaultOrder()
+      }
+      traverse (reachable.defaultOrder() -> #x blockedId) {
+        \ nodeStates.get(blockedId)&.addBlockedBy(id)
+      }
+    }
+  }
+}
