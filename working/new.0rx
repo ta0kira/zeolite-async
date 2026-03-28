@@ -1,35 +1,21 @@
-concrete Node {
-  @type new (DefaultOrder<Int> outgoing:) -> (#self)
-  @value outgoing () -> (DefaultOrder<Int>)
-}
+concrete NodeState<#x> {
+  #x immutable
+  #x defines Equals<#x>
+  #x defines LessThan<#x>
+  #x requires Hashed
 
-define Node {
-  @value DefaultOrder<Int> outgoing
-
-  new (outgoing) { return delegate -> #self }
-  outgoing () { return outgoing }
-}
-
-concrete NodeState {
-  refines Duplicate
-
-  @type new (DefaultOrder<Int>) -> (#self)
-  @value reachable () -> (DefaultOrder<Int>)
-  @value blockedBy () -> (CategoricalReader<Int>)
-  @value addBlockedBy (Int) -> (#self)
-  @value removeBlockedBy (Int) -> (#self)
+  @type new (DefaultOrder<#x>) -> (#self)
+  @value reachable () -> (DefaultOrder<#x>)
+  @value blockedBy () -> (CategoricalReader<#x>)
+  @value addBlockedBy (#x) -> (#self)
+  @value removeBlockedBy (#x) -> (#self)
 }
 
 define NodeState {
-  @value DefaultOrder<Int> reachable
-  @value CategoricalTree<Int> blockedBy
+  @value DefaultOrder<#x> reachable
+  @value CategoricalTree<#x> blockedBy
 
-  new (reachable) { return #self{ reachable, CategoricalTree<Int>.default() } }
-
-  duplicate () {
-    return #self{ reachable, blockedBy.duplicate() }
-  }
-
+  new (reachable) { return #self{ reachable, CategoricalTree<#x>.default() } }
   reachable () { return reachable }
   blockedBy () { return blockedBy }
 
@@ -44,80 +30,70 @@ define NodeState {
   }
 }
 
-concrete NodePermuter {
-  refines Duplicate
+concrete NodePermuter<#x> {
+  #x immutable
+  #x defines Equals<#x>
+  #x defines LessThan<#x>
+  #x requires Hashed
 
-  @type fromNodes ([KVReader<Int, Node> & DefaultOrder<KeyValue<Int, Node>>]) -> (#self)
-  @value consumeAndPermute (Generator<Float> probability:, Append<Int> output:) -> (Float)
+  @type fromEdges ([KVReader<#x, DefaultOrder<#x>> & KeyOrder<#x>]) -> (#self)
+  @value consumeAndPermute (optional Generator<Float> probability:, Append<#x> output:) -> (Int)
 }
 
 define NodePermuter {
-  @value CategoricalTree<Int> remainingNodes
-  @value [KVReader<Int, NodeState> & DefaultOrder<KeyValue<Int, NodeState>>] nodeStates
+  @value CategoricalTree<#x> remainingNodes
+  @value [KVReader<#x, NodeState<#x>> & DefaultOrder<KeyValue<#x, NodeState<#x>>>] nodeStates
 
-  fromNodes (allNodes) {
-    CategoricalTree<Int> remainingNodes <- CategoricalTree<Int>.default()
-    HashedMap<Int, NodeState> nodeStates <- HashedMap<Int, NodeState>.default()
-    traverse (allNodes.defaultOrder() -> KeyValue<Int, Node> nodeWithId) {
-      \ nodeWithId.getKey() `remainingNodes.setWeight` 1
-      \ setAllReachable(nodeWithId.getKey(), nodeWithId.getValue(), allNodes, nodeStates)
+  fromEdges (edges) {
+    CategoricalTree<#x> remainingNodes <- CategoricalTree<#x>.default()
+    HashedMap<#x, NodeState<#x>> nodeStates <- HashedMap<#x, NodeState<#x>>.default()
+    traverse (edges.keyOrder() -> #x id) {
+      \ id `remainingNodes.setWeight` 1
+      \ setAllReachable(id, edges.get(id), edges, nodeStates)
     }
     return #self{ remainingNodes, nodeStates }
   }
 
-  duplicate () {
-    HashedMap<Int, NodeState> newStates <- HashedMap<Int, NodeState>.default()
-    traverse (nodeStates.defaultOrder() -> KeyValue<Int, NodeState> nodeWithId) {
-      \ nodeWithId.getKey() `newStates.set` nodeWithId.getValue().duplicate()
-    }
-    return #self{ remainingNodes.duplicate(), newStates }
-  }
-
-  consumeAndPermute (probability, output) (jumpCost) {
-    jumpCost <- 0.0
+  consumeAndPermute (probability, output) (count) {
+    count <- 0
     while (remainingNodes.getTotal() > 0) {
-      \ BasicOutput.stderr().write("Determine ").write(remainingNodes.getTotal()).write("...\n")
       scoped {
-        CategoricalReader<Int> subgraph <- remainingNodes
+        CategoricalReader<#x> subgraph <- remainingNodes
         Int jumpNumber <- 0
       } in while (subgraph.getTotal() > 0) {
-        \ BasicOutput.stderr().write("Jump ").write(jumpNumber).write("...\n")
-        Int nextId <- subgraph.locate((subgraph.getTotal().asFloat()*probability.generate()).asInt())
-        optional NodeState nextNode <- nodeStates.get(nextId)
+        Float weight <- probability&.generate() <|| 0.0
+        #x nextId <- subgraph.locate((subgraph.getTotal().asFloat()*weight).asInt())
+        optional NodeState<#x> nextNode <- nodeStates.get(nextId)
         if (! `present` nextNode) {
           fail("bad graph")
         } elif ((subgraph <- require(nextNode).blockedBy()).getTotal() == 0) {
-          \ BasicOutput.stderr().write("Select ").write(nextId).write("...\n")
+          count <- count+1
           \ output.append(nextId)
           \ nextId `remainingNodes.setWeight` 0
-          traverse (nextNode&.reachable()&.defaultOrder() -> Int blockedId) {
+          traverse (nextNode&.reachable()&.defaultOrder() -> #x blockedId) {
             \ nodeStates.get(blockedId)&.removeBlockedBy(nextId)
           }
-        } else {
-          jumpNumber <- jumpNumber+1
-          jumpCost <- jumpCost+Math.log2(subgraph.getTotal().asFloat())
         }
       }
     }
   }
 
-  @type setAllReachable (Int, optional Node, KVReader<Int, Node>, [KVReader<Int, NodeState> & KVWriter<Int, NodeState>]) -> (NodeState)
-  setAllReachable (id, node, allNodes, nodeStates) (nodeState) {
+  @type setAllReachable (#x, optional DefaultOrder<#x>, KVReader<#x, DefaultOrder<#x>>, [KVReader<#x, NodeState<#x>> & KVWriter<#x, NodeState<#x>>]) -> (NodeState<#x>)
+  setAllReachable (id, node, edges, nodeStates) (nodeState) {
     scoped {
-      optional NodeState maybeExisting <- nodeStates.get(id)
+      optional NodeState<#x> maybeExisting <- nodeStates.get(id)
     } in if (`present` nodeStates.get(id)) {
       nodeState <- require(maybeExisting)
     } else {
-      \ BasicOutput.stderr().write("Reachability ").write(id).write("...\n")
-      Vector<Int> reachable <- Vector<Int>.default()
-      \ id `nodeStates.set` (nodeState <- NodeState.new(reachable))
-      traverse (node&.outgoing()&.defaultOrder() -> Int blockedId) {
+      Vector<#x> reachable <- Vector<#x>.default()
+      \ id `nodeStates.set` (nodeState <- NodeState<#x>.new(reachable))
+      traverse (node&.defaultOrder() -> #x blockedId) {
         $Hidden[id, node]$
-        optional Node blockedNode <- allNodes.get(blockedId)
-        NodeState childState <- setAllReachable(blockedId, blockedNode, allNodes, nodeStates)
+        optional DefaultOrder<#x> blockedNode <- edges.get(blockedId)
+        NodeState<#x> childState <- setAllReachable(blockedId, blockedNode, edges, nodeStates)
         \ reachable.append(blockedId) `AppendH:from` childState.reachable().defaultOrder()
       }
-      traverse (reachable.defaultOrder() -> Int blockedId) {
+      traverse (reachable.defaultOrder() -> #x blockedId) {
         \ nodeStates.get(blockedId)&.addBlockedBy(id)
       }
     }
@@ -156,16 +132,13 @@ define NewTest {
     Int count <- ParseChars.int(Argv.global().readAt(4)).getValue()
 
     Generator<Float> probability <- RandomUniform.probability().setSeed((Realtime.monoSeconds()*1000.0).asInt())
+    optional Subgraph<Int> subgraph <- defer
     if (recursive) {
-      \ runWithRecursion(size, count, flipped, probability)
+      subgraph <- generateRecursiveTree(size: size, flipped: flipped, index: 0)
     } else {
-      \ runWithJumps(size, count, flipped, probability)
+      subgraph <- generateGraphTree(size: size, flipped: flipped)
     }
-  }
 
-  @type runWithRecursion (Int, Int, Bool, Generator<Float>) -> ()
-  runWithRecursion (size, count, flipped, probability) {
-    optional Subgraph<Int> subgraph <- generateRecursiveTree(size: size, flipped: flipped, index: 0)
     traverse (Counter.zeroIndexed(count) -> _) {
       \ BasicOutput.stdout().write("[")
       traverse (subgraph&.serialize(probability: probability){0} -> Int id) {
@@ -196,38 +169,13 @@ define NewTest {
     }
   }
 
-  @type runWithJumps (Int, Int, Bool, Generator<Float>) -> ()
-  runWithJumps (size, count, flipped, probability) {
-    NodePermuter permuter <- generateGraphTree(size: size, flipped: flipped)
-    traverse (Counter.zeroIndexed(count) -> _) {
-      NodePermuter newPermuter <- permuter
-      $Hidden[permuter]$
-      if (count > 1) {
-        newPermuter <- newPermuter.duplicate()
-      }
-      Vector<Int> output <- Vector<Int>.default()
-      Float jumpCost <- newPermuter.consumeAndPermute(probability: probability, output: output)
-      \ BasicOutput.stdout().write("[")
-      traverse (output.defaultOrder() -> Int id) {
-        \ BasicOutput.stdout().write(" ").write(id)
-      }
-      \ BasicOutput.stdout()
-        .write(" ]\n")
-      \ BasicOutput.stderr()
-        .write("jumpCost: ").write(jumpCost)
-        .write("\n")
-    }
-  }
-
-  @type generateGraphTree (Int size:, Bool flipped:) -> (NodePermuter)
+  @type generateGraphTree (Int size:, Bool flipped:) -> (Subgraph<Int>)
   generateGraphTree (size, flipped) {
     HashedMap<Int, [Append<Int> & DefaultOrder<Int>]> edges <- HashedMap<Int, [Append<Int> & DefaultOrder<Int>]>.default()
     traverse (Counter.zeroIndexed(size) -> Int id) {
-      \ BasicOutput.stderr().write("Initialize ").write(id).write("...\n")
       \ id `edges.set` Vector<Int>.default()
     }
     traverse (Counter.zeroIndexed(size) -> Int id) {
-      \ BasicOutput.stderr().write("Connect ").write(id).write("...\n")
       Int leftValue <- (id << 1)+1
       Int rightValue <- (id << 1)+2
       if (leftValue < size) {
@@ -245,12 +193,7 @@ define NewTest {
         }
       }
     }
-    HashedMap<Int, Node> allNodes <- HashedMap<Int, Node>.new()
-    traverse (edges.defaultOrder() -> KeyValue<Int, DefaultOrder<Int>> edgesWithId) {
-      \ BasicOutput.stderr().write("Nodify ").write(edgesWithId.getKey()).write("...\n")
-      \ edgesWithId.getKey() `allNodes.set` Node.new(outgoing: edgesWithId.getValue())
-    }
-    return NodePermuter.fromNodes(allNodes)
+    return GeneralSubgraph<Int>.new(edges: edges)
   }
 }
 
@@ -373,5 +316,28 @@ define LeafSubgraph {
   serialize (_) {
     ForwardNode<#x> newNode <- ForwardNode<#x>.newNode(value)
     return newNode, newNode, 1
+  }
+}
+
+concrete GeneralSubgraph<#x> {
+  refines Subgraph<#x>
+  #x immutable
+  #x defines Equals<#x>
+  #x defines LessThan<#x>
+  #x requires Hashed
+
+  @type new ([KVReader<#x, DefaultOrder<#x>> & KeyOrder<#x>] edges:) -> (#self)
+}
+
+define GeneralSubgraph {
+  @value [KVReader<#x, DefaultOrder<#x>> & KeyOrder<#x>] edges
+
+  new (edges) { return delegate -> #self }
+
+  serialize (probability) (head, tail, size) {
+    ListBuilder<#x, ForwardNode<#x>> builder <- ForwardNode<#x>.builder()
+    NodePermuter<#x> permuter <- NodePermuter<#x>.fromEdges(edges)
+    size <- permuter.consumeAndPermute(probability: probability, output: builder)
+    head, tail <- builder.build()
   }
 }
