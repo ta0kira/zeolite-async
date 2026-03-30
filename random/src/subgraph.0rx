@@ -22,7 +22,7 @@ define IndependentSubgraphs {
     } update {
       index <- index+1
     }
-    while (allRemaining.getTotal() > 0) {
+    while (allRemaining.uniqueCount() > 1) {
       Float weight <- probability&.generate() <|| 0.0
       Int nextIndex <- allRemaining.locate((allRemaining.getTotal().asFloat()*weight).asInt())
       \ allRemaining.decrWeight(nextIndex)
@@ -38,6 +38,22 @@ define IndependentSubgraphs {
         if (! `present` head) {
           head <- nextNode
         }
+      }
+    }
+    if (allRemaining.uniqueCount() > 0) {
+      scoped {
+        optional ForwardNode<#x> nextNode <- allSerialized.get(allRemaining.locate(0))
+      } in while (`present` nextNode) {
+        size <- size+1
+        if (`present` tail) {
+          \ require(tail).setNext(nextNode)
+        }
+        tail <- nextNode
+        if (! `present` head) {
+          head <- nextNode
+        }
+      } update {
+        nextNode <- require(nextNode).next()
       }
     }
   }
